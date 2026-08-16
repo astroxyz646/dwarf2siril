@@ -304,6 +304,43 @@ class ScriptLayerTests(unittest.TestCase):
         script = self._script(PostOptions(stretch=True, previews=False))
         self.assertIn("autostretch -linked", script)
 
+    def test_every_autostretch_in_the_script_is_linked(self) -> None:
+        """Including the previews, which is where this was wrong.
+
+        Siril's autostretch DEFAULTS TO UNLINKED: three curves, one per
+        channel, worked out separately for each image. The previews used the
+        bare command, so every stage came back with its own colour balance --
+        on one real run the blue-to-green midtone ratio went from 0.81 on the
+        plain stack to 2.06 on the final image, and only part of that was
+        anything a layer had done.
+
+        This is the panel that exists to answer "what did this layer change".
+        A preview that adds a colour change of its own is answering with its
+        own noise, so the rule is every autostretch, not just the layer's.
+
+        Checked across every combination rather than one script, because the
+        bare form only appeared in the preview helper and a test of the
+        stretch layer alone never went near it.
+        """
+        import itertools
+
+        names = [
+            "background_removal", "plate_solve", "colour_calibration",
+            "denoise", "star_reduction", "stretch",
+        ]
+        for bits in itertools.product([False, True], repeat=len(names)):
+            options = PostOptions(**dict(zip(names, bits)), previews=True)
+            options.resolve()
+            for command in self._commands(self._script(options)):
+                if command.split()[0] == "autostretch":
+                    with self.subTest(layers=[n for n, b in zip(names, bits) if b]):
+                        self.assertEqual(
+                            "autostretch -linked",
+                            command,
+                            "a bare autostretch re-balances the channels by "
+                            "itself and invents a colour change",
+                        )
+
     def test_the_final_preview_is_not_stretched_twice(self) -> None:
         """The preview autostretches linear data. Stretched data is already done.
 
@@ -322,7 +359,13 @@ class ScriptLayerTests(unittest.TestCase):
         )
         # Walk back to the load that starts this preview block.
         start = max(i for i, l in enumerate(lines[:final]) if l.startswith("load "))
-        self.assertNotIn("autostretch", lines[start:final])
+        # startswith, not list membership. The command now carries a flag, so
+        # `assertNotIn("autostretch", ...)` would pass on any script at all --
+        # including one that stretches twice.
+        self.assertFalse(
+            [l for l in lines[start:final] if l.startswith("autostretch")],
+            "the finished picture is being stretched a second time",
+        )
 
     def test_the_plain_stack_preview_is_still_stretched(self) -> None:
         """It is linear whatever the layers did, so it needs the stretch."""
@@ -336,7 +379,7 @@ class ScriptLayerTests(unittest.TestCase):
             i for i, l in enumerate(lines) if l.startswith("savejpg previews/00_stacked")
         )
         start = max(i for i, l in enumerate(lines[:stacked]) if l.startswith("load "))
-        self.assertIn("autostretch", lines[start:stacked])
+        self.assertIn("autostretch -linked", lines[start:stacked])
 
     def test_star_reduction_is_last_and_recombines_the_star_layer(self) -> None:
         options = PostOptions(

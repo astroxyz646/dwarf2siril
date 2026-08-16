@@ -88,11 +88,32 @@ def _preview_lines(
     the stretch layer has ALREADY stretched blows the highlights out and
     makes the finished picture look worse than the intermediate ones, which
     is exactly backwards.
+
+    -linked, AND THE PANEL'S HONESTY DEPENDS ON IT. Siril's autostretch
+    defaults to UNLINKED: three curves, one per channel, worked out
+    separately for every stage. Two stages therefore come back with
+    different colour balances for a reason that has nothing to do with the
+    layer between them -- measured on one real run, the blue-to-green
+    midtone ratio went from 0.81 on the plain stack to 2.06 on the final
+    image, and only part of that was anything a layer did.
+
+    This is the before/after panel. Its whole job is answering "what did
+    this layer change", and a preview that adds a colour change of its own
+    is answering with its own noise. It also feeds the check that decides
+    whether to tell the user "these two are the same picture" -- the
+    reassurance written for someone who thought plate solving had failed --
+    and a rebalance nobody asked for can push two identical images apart and
+    take that reassurance away.
+
+    Linked gives each image ONE curve, so the balance in the JPEG is the
+    balance in the data. Verified against Siril 1.4.4 rather than assumed:
+    the flag is accepted, the log says "Computing linked auto-stretch", and
+    there is no -unlinked to pair with it.
     """
     index = PREVIEW_INDEX[label]
     lines = [f"# Preview: {caption}"]
     if not already_stretched:
-        lines.append("autostretch")
+        lines.append("autostretch -linked")
     lines.extend(
         [
             f"resample -maxdim={PREVIEW_MAX_DIM}",
