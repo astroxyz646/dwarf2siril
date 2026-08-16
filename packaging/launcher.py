@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import sys
 import traceback
+from types import SimpleNamespace
 
 
 def _diagnose() -> int:
@@ -532,6 +533,180 @@ def _start_grid(window, state) -> None:
     state["phase"] = "grid"
 
 
+def _check_after_the_run(app, window, folder: str) -> None:
+    """Everything the app does AFTER Siril finishes, inside the bundle.
+
+    *** WHY THIS EXISTS ***
+    The harness used to stop at the frame gallery, which means it stopped at
+    the exact point the app starts talking about RESULTS. The before/after
+    panel, the run panel's verdict and the failure message were verified
+    offscreen and nowhere else -- and offscreen is the half that has never
+    caught anything, because the defects that shipped were about real fonts,
+    real DPI and a real window. The album hang came from this same region.
+
+    Driven against an ALREADY FINISHED output folder, so nothing is stacked
+    and nothing is written. It only reads.
+    """
+    from pathlib import Path
+
+    from dwarf2siril.postprocess import PostOptions
+    from dwarf2siril.siril import interpret
+
+    where = Path(folder)
+    print(f"\nafter the run, against {where}")
+    if not where.is_dir():
+        print("  RESULT FOLDER MISSING -- skipped")
+        return
+
+    stack = next(
+        (
+            p.stem
+            for p in sorted(where.glob("*.fit"))
+            if not p.stem.endswith("_processed")
+            and not p.stem.startswith(("starless_", "starmask_"))
+        ),
+        None,
+    )
+    if stack is None:
+        print("  no stacked .fit in there -- skipped")
+        return
+
+    present = {p.stem for p in (where / "previews").glob("*.jpg")}
+    print(f"  stack {stack!r}, {len(present)} previews on disk")
+
+    # 1. THE PANEL LOADS AND SHOWS REAL PIXELS.
+    panel = window.preview_panel
+    ticked = PostOptions(background_removal=True, denoise=True, stretch=True)
+    shown = panel.load_from(where, stack, ticked, solvable=True)
+    print(f"  panel loads: {shown}, {len(panel.previews)} stages offered")
+    if not shown:
+        print("  PANEL REFUSED TO LOAD")
+        return
+
+    panel.show()
+    for _ in range(12):
+        app.processEvents()
+
+    before = panel.swipe.before
+    after = panel.swipe.after
+    for name, pixmap in (("before", before), ("after", after)):
+        if pixmap is None or pixmap.isNull():
+            print(f"  SWIPE {name.upper()} IMAGE IS NULL -- nothing is drawn")
+        else:
+            print(f"  swipe {name}: {pixmap.width()}x{pixmap.height()}")
+
+    # 2. THE MISSING-LAYER EXPLANATION, BOTH WAYS ROUND.
+    # Ticked above but certainly absent from an old folder, so the panel has
+    # to account for them rather than drop them.
+    if panel.missing.isHidden():
+        print("  MISSING LINE HIDDEN while ticked layers are absent")
+    else:
+        text = panel.missing.text()
+        named = [n for n in ("Denoise", "Stretch") if n in text]
+        print(f"  missing line names: {', '.join(named) or 'NOTHING'}")
+
+    # And the other direction: nothing ticked, so nothing to explain.
+    panel.load_from(where, stack, PostOptions(), solvable=True)
+    for _ in range(6):
+        app.processEvents()
+    print(f"  with nothing ticked, missing line hidden: {panel.missing.isHidden()}")
+    panel.load_from(where, stack, ticked, solvable=True)
+
+    # 3. THE VERDICT, SUCCESS AND FAILURE, IN THE REAL PANEL.
+    built = SimpleNamespace(
+        script_path=where / f"{stack}.ssf",
+        output_dir=where,
+        lights_copied=350,
+        darks_copied=30,
+        linked=False,
+        warnings=[],
+        stages=[],
+    )
+    run = window.run_panel
+    run.show_result(built, stack)
+    run.show()
+
+    image = where / f"{stack}.fit"
+    run._on_finished(interpret(["log: Script execution finished successfully."],
+                               exit_code=0, expected_image=image))
+    for _ in range(6):
+        app.processEvents()
+    print(f"  verdict, success: {_plain(run.verdict.text())[:72]!r}")
+
+    # The failure path, which no in-bundle check has ever seen. Real Siril
+    # output from a real failed run, through the real interpreter.
+    run._on_finished(interpret(
+        [
+            "log: Error in line 22 ('stack'): not enough images.",
+            "log: Script execution failed.",
+        ],
+        exit_code=1,
+        expected_image=None,
+    ))
+    for _ in range(6):
+        app.processEvents()
+    print(f"  verdict, failure: {_plain(run.verdict.text())[:72]!r}")
+
+    run._on_failed("Siril could not be started.")
+    for _ in range(6):
+        app.processEvents()
+    print(f"  verdict, no siril: {_plain(run.verdict.text())[:72]!r}")
+
+    # 4. AND NONE OF IT MAY CLIP. This is the state the window has never
+    # been measured in: the result panel is only built after a run, so every
+    # clipping check so far has run on a window that did not have one.
+    original = window.size()
+    for wide, high in ((1636, 1171), (1280, 880), (1000, 680)):
+        window.resize(wide, high)
+        for _ in range(24):
+            app.processEvents()
+        clipped = find_clipping(window)
+        print(f"  {wide}x{high} with the result showing: "
+              + (f"CLIPPED - {len(clipped)} problems" if clipped
+                 else "nothing clipped"))
+        for problem in clipped[:8]:
+            print(f"      {problem}")
+    window.resize(original)
+    app.processEvents()
+
+
+def _plain(markup: str) -> str:
+    """Rich text with the tags taken out, so a verdict prints readably."""
+    import re
+
+    return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", "", markup)).strip()
+
+
+def _finish(app, window, state) -> None:
+    """Close the grid, run the after-the-run checks if asked, then quit.
+
+    The grid and gallery are shut first: they are separate windows sitting
+    over the main one, and find_clipping measures the main window, so
+    leaving them open would measure the wrong thing.
+    """
+    import os
+
+    for key in ("gallery", "grid"):
+        extra = state.get(key)
+        if extra is not None:
+            try:
+                extra.close()
+            except Exception:  # noqa: BLE001 - closing a window is not worth failing on
+                pass
+    app.processEvents()
+
+    folder = os.environ.get("DWARF2SIRIL_DIAGNOSE_RESULT", "")
+    if folder:
+        try:
+            _check_after_the_run(app, window, folder)
+        except Exception:  # noqa: BLE001
+            import traceback as tb
+
+            print("  AFTER-THE-RUN CHECK RAISED:")
+            print("    " + tb.format_exc().replace("\n", "\n    "))
+    app.quit()
+
+
 def _diagnose_real_app(app, card: str) -> int:
     """Open the REAL window on a real card and open a viewer, inside the exe.
 
@@ -647,12 +822,12 @@ def _diagnose_real_app(app, card: str) -> int:
                 if pixmap is not None and not pixmap.isNull():
                     print(f"  GALLERY OK: frame shown after {elapsed:.1f}s "
                           f"({pixmap.width()}x{pixmap.height()})")
-                    app.quit()
+                    _finish(app, window, state)
                     return
                 if elapsed >= 25:
                     print(f"  GALLERY FAILED: still {gallery.view.text()!r} "
                           f"after {elapsed}s")
-                    app.quit()
+                    _finish(app, window, state)
                     return
 
         QTimer.singleShot(500, tick)
