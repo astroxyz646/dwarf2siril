@@ -477,9 +477,10 @@ python -m dwarf2siril.gui.app
 </details>
 
 <details>
-<summary><b>Building the .exe</b></summary>
+<summary><b>Building the .exe locally</b></summary>
 
-Build on Windows — PyInstaller does not cross-compile.
+Only needed if you are building without going through CI. Build on Windows —
+PyInstaller does not cross-compile.
 
 ```bash
 pip install PySide6 pyinstaller
@@ -515,16 +516,21 @@ a crash that happens before the window opens.
 <details>
 <summary><b>Cutting a release</b></summary>
 
-The `.exe` is a build artefact and is not committed. Attach it to a GitHub
-release instead:
+The `.exe` is a build artefact and is not committed. GitHub Actions builds and
+publishes it, so cutting a release is two commands:
 
 ```bash
-python packaging/build_exe.py --clean
 git tag v0.1.0
 git push origin v0.1.0
-gh release create v0.1.0 dist/onefile/Dwarf2Siril.exe ^
-  --title "Dwarf2Siril v0.1.0" --notes "First release."
 ```
+
+`.github/workflows/release.yml` then runs on a Windows runner: it runs the
+tests, builds the one-file exe, and attaches it to a new release named after
+the tag. If the tests fail, nothing is published.
+
+To get a test build without publishing anything, run the workflow manually from
+the **Actions** tab — the exe is uploaded as a downloadable build artifact on
+every run, tagged or not.
 
 </details>
 
