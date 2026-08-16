@@ -1381,14 +1381,14 @@ class MainWindow(QWidget):
             pass
 
     def _on_stack_finished(self, ok: bool) -> None:
-        if ok:
-            self._remember_stack()
         """Show the before/after view once Siril has finished.
 
         A missing or unreadable preview must never turn a successful stack
         into a failure, so this only ever adds a panel -- it cannot take the
         success away.
         """
+        if ok:
+            self._remember_stack()
         if not ok or self.preview_panel is None or self._last_output_dir is None:
             return
         try:
