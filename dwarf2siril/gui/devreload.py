@@ -121,6 +121,16 @@ class DevReloader:
             print(f"[dev] theme reload failed, app left as it was: {exc}")
 
     def _restart(self, changed: set[str]) -> None:
+        # NEVER restart on top of a running stack. os.execv replaces this
+        # process outright, so a save while Siril is working kills the build
+        # mid-flight and leaves a half-written output folder behind. An edit
+        # can wait; an hour of stacking cannot be got back.
+        if self._busy():
+            print(f"[dev] busy, holding restart for {', '.join(sorted(changed))}")
+            self._dirty.update(changed)
+            self._pending.start(2000)
+            return
+
         print(f"[dev] restarting for {', '.join(sorted(changed))}")
         try:
             self._remember()
@@ -130,6 +140,19 @@ class DevReloader:
             os.execv(sys.executable, [sys.executable] + sys.argv)
         except Exception as exc:  # noqa: BLE001
             print(f"[dev] could not restart: {exc}")
+
+    def _busy(self) -> bool:
+        """Is a build or a stack running right now?
+
+        Asked of the window rather than tracked here, so there is one answer
+        to the question and it is the window's.
+        """
+        if self._window is None:
+            return False
+        try:
+            return bool(self._window._busy())
+        except Exception:  # noqa: BLE001 - if in doubt, do not restart
+            return True
 
     def _remember(self) -> None:
         """Put back what the developer was looking at.

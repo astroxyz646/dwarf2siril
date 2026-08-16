@@ -129,6 +129,7 @@ _LAYER_WEIGHT = {
     "denoise": 0.10,      # NL-Bayes on a 4K frame is not quick
     "starnet": 0.12,
     "pm": 0.01,
+    "autostretch": 0.01,
 }
 
 _LAYER_LABEL = {
@@ -138,6 +139,7 @@ _LAYER_LABEL = {
     "denoise": "Reducing the noise",
     "starnet": "Separating the stars from the rest",
     "pm": "Putting the stars back, smaller",
+    "autostretch": "Stretching it into a finished picture",
 }
 
 

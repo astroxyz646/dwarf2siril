@@ -35,9 +35,10 @@ from . import theme
 STAGE_LABELS = [
     ("00_stacked", "Plain stack"),
     ("01_background", "Background removed"),
-    ("02_colour", "Colour calibrated"),
-    ("03_denoised", "Denoised"),
-    ("04_stars_reduced", "Stars reduced"),
+    ("02_solved", "Plate solved"),
+    ("03_colour", "Colour calibrated"),
+    ("04_denoised", "Denoised"),
+    ("05_stars_reduced", "Stars reduced"),
     ("99_final", "Final"),
 ]
 

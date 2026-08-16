@@ -40,6 +40,24 @@ PREVIEW_DIR = "previews"
 PREVIEW_MAX_DIM = 1600
 PREVIEW_QUALITY = 90
 
+# The number each preview carries, FIXED per stage rather than counted as the
+# script is written. A counter looked tidier and was wrong: with background
+# removal switched off, colour calibration took number 01 and was written as
+# 01_colour.jpg -- a name the panel has never heard of, so it dropped the
+# preview on the floor and showed only the plain stack and the final image.
+# The user saw two identical-looking pictures and reasonably concluded the
+# whole thing had done nothing. A stage's number is part of its identity and
+# must not depend on which OTHER stages happen to be switched on.
+PREVIEW_INDEX = {
+    "stacked": 0,
+    "background": 1,
+    "solved": 2,
+    "colour": 3,
+    "denoised": 4,
+    "stars_reduced": 5,
+    "final": 99,
+}
+
 # Suffix for the post-processed image. The plain stack keeps its own name, so
 # the user always has the untouched version to go back to.
 PROCESSED_SUFFIX = "_processed"
@@ -56,19 +74,32 @@ def siril_path(path) -> str:
     return '"' + str(path).replace("\\", "/") + '"'
 
 
-def _preview_lines(label: str, index: int, caption: str) -> list[str]:
+def _preview_lines(
+    label: str, caption: str, already_stretched: bool = False
+) -> list[str]:
     """Snapshot whatever is currently loaded, as a small stretched JPEG.
 
     autostretch and resample both modify the loaded image, so this is only
     ever emitted straight after the .fit has been saved. The caller reloads
     afterwards for the next step.
+
+    ``already_stretched`` skips the autostretch. Linear data has to be
+    stretched or the JPEG is a black rectangle -- but stretching data that
+    the stretch layer has ALREADY stretched blows the highlights out and
+    makes the finished picture look worse than the intermediate ones, which
+    is exactly backwards.
     """
-    return [
-        f"# Preview: {caption}",
-        "autostretch",
-        f"resample -maxdim={PREVIEW_MAX_DIM}",
-        f"savejpg {PREVIEW_DIR}/{index:02d}_{label} {PREVIEW_QUALITY}",
-    ]
+    index = PREVIEW_INDEX[label]
+    lines = [f"# Preview: {caption}"]
+    if not already_stretched:
+        lines.append("autostretch")
+    lines.extend(
+        [
+            f"resample -maxdim={PREVIEW_MAX_DIM}",
+            f"savejpg {PREVIEW_DIR}/{index:02d}_{label} {PREVIEW_QUALITY}",
+        ]
+    )
+    return lines
 
 
 def _post_processing_lines(
@@ -87,7 +118,6 @@ def _post_processing_lines(
     lines: list[str] = []
     add = lines.append
     working = f"{name}{PROCESSED_SUFFIX}"
-    step = 0
 
     # THE OPTICS THESE FRAMES WERE ACTUALLY SHOT WITH, not the telephoto's.
     # This was hard-coded to 150mm / 2.0um, which is right for the telephoto
@@ -126,7 +156,6 @@ def _post_processing_lines(
     # reloaded at any point, so it is taken at the end instead. Every other
     # preview already runs after its own "save", so the .fit is on disk
     # before any JPEG is attempted.
-    step += 1   # keeps its 00_ prefix, and its place in the panel's order
 
     if post.background_removal:
         add("")
@@ -139,8 +168,7 @@ def _post_processing_lines(
         add("subsky -rbf -samples=20 -tolerance=1.0 -smooth=0.5")
         add(f"save {working}")
         if post.previews:
-            lines.extend(_preview_lines("background", step, "after background removal"))
-            step += 1
+            lines.extend(_preview_lines("background", "after background removal"))
 
     if post.plate_solve and not solvable:
         add("")
@@ -164,17 +192,23 @@ def _post_processing_lines(
         add("# the whole sky. Solves against Siril's local Gaia catalogue,")
         add("# so it needs no internet.")
         add("#")
-        add("# -noflip because by default Siril TURNS THE IMAGE UPSIDE DOWN")
-        add("# when it decides the sky is the other way up. The solution is")
-        add("# correct either way -- Siril writes a WCS that matches whichever")
-        add("# orientation the pixels end up in -- but flipping means the")
-        add("# finished picture no longer matches the plain stack beside it,")
-        add("# which breaks the before/after view and surprises the user for")
-        add("# no benefit. Measured: with -noflip the pixels come out")
-        add("# bit-identical to the input, and Siril still accepts the file as")
-        add("# solved (pcc runs on it).")
-        add(f"platesolve -focal={focal:g} -pixelsize={pixel:g} -noflip")
+        add("# The solve is allowed to flip. Siril turns the image the right")
+        add("# way up when it works out the sky is the other way round, and")
+        add("# that orientation -- north up -- is the one that matches every")
+        add("# star chart and every other image of the same object. This used")
+        add("# to pass -noflip to keep the before/after pair lined up; the")
+        add("# pair is kept lined up by solving the plain stack before its")
+        add("# snapshot is taken instead, which costs nothing and does not")
+        add("# leave the finished picture upside down.")
+        add(f"platesolve -focal={focal:g} -pixelsize={pixel:g}")
         add(f"save {working}")
+        if post.previews:
+            # The solve used to change no pixels, so it had no preview and
+            # the panel simply said so. Now that it is allowed to flip, it
+            # CAN change every pixel -- and a step that turns the picture
+            # the other way up without appearing in the before/after list is
+            # exactly the sort of thing that reads as "it did not work".
+            lines.extend(_preview_lines("solved", "after plate solving"))
 
     if post.colour_calibration and not solvable:
         add("")
@@ -194,8 +228,7 @@ def _post_processing_lines(
         add("pcc")
         add(f"save {working}")
         if post.previews:
-            lines.extend(_preview_lines("colour", step, "after colour calibration"))
-            step += 1
+            lines.extend(_preview_lines("colour", "after colour calibration"))
 
     if post.denoise:
         add("")
@@ -211,8 +244,7 @@ def _post_processing_lines(
         add("denoise -nocosmetic")
         add(f"save {working}")
         if post.previews:
-            lines.extend(_preview_lines("denoised", step, "after denoising"))
-            step += 1
+            lines.extend(_preview_lines("denoised", "after denoising"))
 
     if post.star_reduction:
         kept = post.star_amount
@@ -244,35 +276,63 @@ def _post_processing_lines(
         add(f'pm "$starless_{working}$ + {kept:g}*$starmask_{working}$"')
         add(f"save {working}")
         if post.previews:
-            lines.extend(_preview_lines("stars_reduced", step, "after star reduction"))
-            step += 1
+            lines.extend(_preview_lines("stars_reduced", "after star reduction"))
+
+    if post.stretch:
+        add("")
+        add("# @@SEGMENT optional Stretch")
+        add(f"load {working}")
+        add("# --- Stretch -----------------------------------------------")
+        add("# Everything above this line works on LINEAR data: the numbers")
+        add("# straight off the sensor, where almost all the signal sits in")
+        add("# the bottom couple of percent of the range. That is correct for")
+        add("# measuring and it is why every step so far looks like a flat")
+        add("# grey rectangle with some stars in it. This is the step that")
+        add("# turns it into a picture.")
+        add("#")
+        add("# -linked stretches all three channels by the same curve, so the")
+        add("# colour balance that pcc worked out survives. Unlinked would")
+        add("# re-balance the channels by itself and quietly throw that away.")
+        add("#")
+        add("# Last on purpose: subsky, pcc and starnet all expect linear")
+        add("# input, so stretching earlier would give every one of them the")
+        add("# wrong kind of data.")
+        add("autostretch -linked")
+        add(f"save {working}")
+
+    if post.plate_solve and solvable:
+        add("")
+        add("# @@SEGMENT optional Coordinates on the plain stack")
+        add("# --- And the plain stack too -------------------------------")
+        add("# The plain stack is the file plenty of people will actually")
+        add("# open, so it gets the coordinates as well.")
+        add("#")
+        add("# Done BEFORE the previews, not after, because the solve may")
+        add("# flip the image. Both sides of the before/after pair have to")
+        add("# come out the same way up or the comparison is nonsense, so")
+        add("# the plain stack has to be in its final orientation before its")
+        add("# snapshot is taken.")
+        add(f"load {name}")
+        add(f"platesolve -focal={focal:g} -pixelsize={pixel:g}")
+        add(f"save {name}")
 
     if post.previews:
         add("")
         add("# @@SEGMENT optional Previews")
         add(f"load {working}")
         add("# Final side of the before/after pair.")
-        lines.extend(_preview_lines("final", 99, "the finished image"))
+        lines.extend(
+            _preview_lines(
+                "final", "the finished image", already_stretched=post.stretch
+            )
+        )
 
         add("")
         add("# The 'before' side, taken last on purpose -- see above. Every")
         add("# .fit this script produces already exists by this point, so if")
         add("# writing a JPEG fails here it costs a thumbnail and nothing else.")
         add(f"load {name}")
-        lines.extend(_preview_lines("stacked", 0, "the plain stack, before any layer"))
-
-    if post.plate_solve and solvable:
-        add("")
-        add("# @@SEGMENT optional Coordinates on the plain stack")
-        add(f"load {name}")
-        add("# --- And the plain stack too -------------------------------")
-        add("# The plain stack is the file plenty of people will actually")
-        add("# open, so it gets the coordinates as well. Because the solve")
-        add("# uses -noflip it changes no pixels at all, so this adds the")
-        add("# astrometry to the kept file without altering it.")
-        add(f"load {name}")
-        add(f"platesolve -focal={focal:g} -pixelsize={pixel:g} -noflip")
-        add(f"save {name}")
+        lines.extend(_preview_lines("stacked", "the plain stack, before any layer"))
 
     add("")
     add(f"# Processed result: {working}.fit")

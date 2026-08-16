@@ -31,7 +31,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..model import FRAMING_BLURB, FRAMING_CLEAN, FRAMING_LABELS, FRAMING_WHOLE
-from ..postprocess import PostOptions, find_starnet, save_setting
+from ..postprocess import PostOptions, find_starnet, load_settings, save_setting
 from ..quality import DEFAULT_STRENGTH, STRENGTHS, QualityFilter
 from . import theme
 from .cards import divider
@@ -112,6 +112,13 @@ class LayersCard(QFrame):
         self.starnet_path: Path | None = None
         self._framing_chosen = False
 
+        # No saving until the card is built and the remembered state has been
+        # put back. Building the card fires the same signals a user does, and
+        # a card that saves while it is still empty writes ITS OWN blank
+        # state over the settings it is about to read -- which is how the
+        # first attempt at remembering managed to forget everything.
+        self._restoring = True
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(14, 12, 14, 12)
         layout.setSpacing(4)
@@ -158,6 +165,16 @@ class LayersCard(QFrame):
             "so nothing is lost.",
         )
 
+        self.stretch = LayerRow(
+            "Stretch it into a picture",
+            "A stack straight out of Siril is linear: nearly all the signal "
+            "is crammed into the bottom of the range, which is why it looks "
+            "like a flat grey rectangle. This is the step that opens it out "
+            "into something you would actually show someone. Runs last, "
+            "after everything else, because every other layer needs the "
+            "linear data.",
+        )
+
         for row in (
             self.background,
             self.plate_solve,
@@ -200,6 +217,11 @@ class LayersCard(QFrame):
         )
         layout.addWidget(self.amount_box)
         self.amount_box.hide()
+
+        # Added here rather than in the loop above so the star-amount slider
+        # stays directly under the star tick box it belongs to.
+        self.stretch.toggled.connect(self._on_change)
+        layout.addWidget(self.stretch)
 
         # Edges, shown only when there is a real trade: an alt-az session,
         # or separate sessions being combined. Someone stacking one steady
@@ -269,14 +291,76 @@ class LayersCard(QFrame):
             "Small JPEGs showing what each step did, saved next to your .fit."
         )
         self.previews.setChecked(True)
-        self.previews.stateChanged.connect(lambda _: self.changed.emit())
+        self.previews.stateChanged.connect(lambda _: (self._remember(), self.changed.emit()))
         layout.addWidget(self.previews)
 
         self._on_filter_change()
         self.refresh_tools()
+        self._restore()
+
+    # -- remembering -----------------------------------------------------
+
+    # The tick boxes, by the name they are saved under. Order is not
+    # significant; the names are, because they are on disk.
+    def _saveable(self) -> dict:
+        return {
+            "background_removal": self.background,
+            "plate_solve": self.plate_solve,
+            "colour_calibration": self.colour,
+            "denoise": self.denoise,
+            "star_reduction": self.stars,
+            "stretch": self.stretch,
+        }
+
+    def _restore(self) -> None:
+        """Put the tick boxes back the way the user last left them.
+
+        Every extra starts off, and until now it started off again on EVERY
+        launch. That is a trap rather than a safe default: the user ticks
+        five layers, restarts the app for some unrelated reason, stacks, and
+        gets a plain stack with no hint that anything was dropped -- because
+        from the app's point of view nothing was. Watched it happen three
+        times in one morning.
+
+        Restored AFTER refresh_tools, so a remembered star reduction cannot
+        tick a box that has since been disabled for want of StarNet.
+        """
+        saved = load_settings().get("layers")
+        try:
+            if not isinstance(saved, dict):
+                return
+
+            for key, row in self._saveable().items():
+                if row.checkbox.isEnabled() and isinstance(saved.get(key), bool):
+                    row.checkbox.setChecked(saved[key])
+
+            amount = saved.get("star_amount")
+            if isinstance(amount, (int, float)) and 0 <= amount <= 1:
+                self.amount.setValue(int(amount * 100))
+
+            if isinstance(saved.get("previews"), bool):
+                self.previews.setChecked(saved["previews"])
+
+            strength = saved.get("frame_filter")
+            if strength in STRENGTHS:
+                self.frame_filter.setCurrentText(strength.capitalize())
+        finally:
+            self._restoring = False
+
+        self._on_change()
+
+    def _remember(self) -> None:
+        if getattr(self, "_restoring", False):
+            return
+        state = {key: row.checked for key, row in self._saveable().items()}
+        state["star_amount"] = self.amount.value() / 100.0
+        state["previews"] = self.previews.isChecked()
+        state["frame_filter"] = self.frame_filter.currentData() or DEFAULT_STRENGTH
+        save_setting("layers", state)
 
     def _on_filter_change(self) -> None:
         self.filter_blurb.setText(self.quality().describe())
+        self._remember()
         self.changed.emit()
 
     def quality(self) -> QualityFilter:
@@ -378,6 +462,7 @@ class LayersCard(QFrame):
 
     def _on_amount(self, value: int) -> None:
         self.amount_label.setText(f"{value}% of the stars")
+        self._remember()
         self.changed.emit()
 
     def _on_change(self) -> None:
@@ -387,6 +472,7 @@ class LayersCard(QFrame):
         # prerequisite and show that it happened.
         if self.colour.checked and not self.plate_solve.checked:
             self.plate_solve.checkbox.setChecked(True)
+        self._remember()
         self.changed.emit()
 
     def options(self) -> PostOptions:
@@ -396,6 +482,7 @@ class LayersCard(QFrame):
             plate_solve=self.plate_solve.checked,
             colour_calibration=self.colour.checked,
             star_reduction=self.stars.checked,
+            stretch=self.stretch.checked,
             star_amount=self.amount.value() / 100.0,
             starnet_path=self.starnet_path,
             previews=self.previews.isChecked(),

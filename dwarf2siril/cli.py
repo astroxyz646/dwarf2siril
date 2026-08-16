@@ -231,6 +231,7 @@ def cmd_build(args: argparse.Namespace) -> int:
         plate_solve=args.platesolve,
         colour_calibration=args.colour,
         star_reduction=args.star_reduction,
+        stretch=args.stretch,
         star_amount=max(0.0, min(1.0, args.star_amount)),
         starnet_path=Path(args.starnet) if args.starnet else None,
         previews=not args.no_previews,
@@ -437,6 +438,11 @@ def build_parser() -> argparse.ArgumentParser:
         default=0.5,
         metavar="N",
         help="how much of the star layer to keep, 0.0-1.0 (default 0.5)",
+    )
+    layers.add_argument(
+        "--stretch",
+        action="store_true",
+        help="stretch the result into a finished picture (runs last)",
     )
     layers.add_argument(
         "--starnet", help="path to starnet2.exe, if it is somewhere unusual"

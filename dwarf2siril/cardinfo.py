@@ -246,12 +246,17 @@ def _disk_space(path: Path) -> tuple[int, int]:
     import ctypes
     from ctypes import wintypes
 
+    from .drives import no_disk_dialogs
+
     free = ctypes.c_ulonglong(0)
     total = ctypes.c_ulonglong(0)
-    ctypes.windll.kernel32.GetDiskFreeSpaceExW(
-        ctypes.c_wchar_p(str(path)),
-        ctypes.byref(free),
-        ctypes.byref(total),
-        None,
-    )
+    # Guarded: asking a card reader with no card in it for its size raises a
+    # modal "there is no disk in the drive" box that blocks everything.
+    with no_disk_dialogs():
+        ctypes.windll.kernel32.GetDiskFreeSpaceExW(
+            ctypes.c_wchar_p(str(path)),
+            ctypes.byref(free),
+            ctypes.byref(total),
+            None,
+        )
     return total.value, free.value

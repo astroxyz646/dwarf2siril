@@ -99,20 +99,41 @@ class ScriptLayerTests(unittest.TestCase):
 
     def test_plate_solve_is_seeded_with_the_dwarfs_known_optics(self) -> None:
         script = self._script(PostOptions(plate_solve=True, previews=False))
-        self.assertIn("platesolve -focal=150 -pixelsize=2 -noflip", script)
+        self.assertIn("platesolve -focal=150 -pixelsize=2", script)
 
-    def test_plate_solve_never_turns_the_image_upside_down(self) -> None:
-        """Siril flips a "wrong way up" image by default. We do not want that.
+    def test_plate_solve_is_allowed_to_turn_the_image_the_right_way_up(self) -> None:
+        """Siril flips a "wrong way up" image, and that is what we want.
 
-        The solution is correct either way, but flipping leaves the finished
-        picture mirrored relative to the plain stack kept beside it, which
-        breaks the before/after view and surprises the user for no gain.
-        Measured: with -noflip the pixels come out bit-identical.
+        North up is the orientation every star chart and every other image of
+        the same object uses. This used to pass -noflip purely to keep the
+        before/after pair lined up; that is now handled by solving the plain
+        stack BEFORE its snapshot is taken, so both sides end up the same way
+        up without leaving the finished picture upside down.
         """
         script = self._script(PostOptions(plate_solve=True, previews=False))
-        for line in script.splitlines():
-            if line.strip().startswith("platesolve"):
-                self.assertIn("-noflip", line)
+        solves = [
+            line for line in script.splitlines()
+            if line.strip().startswith("platesolve")
+        ]
+        self.assertTrue(solves)
+        for line in solves:
+            self.assertNotIn("-noflip", line)
+
+    def test_the_plain_stack_is_solved_before_its_preview_is_taken(self) -> None:
+        """Both sides of the before/after pair must end up the same way up.
+
+        The solve can flip. Snapshotting the plain stack first and solving it
+        afterwards would leave the kept .fit flipped relative to the JPEG the
+        panel shows beside the final image, which is exactly the confusion
+        -noflip used to avoid.
+        """
+        script = self._script(PostOptions(plate_solve=True, previews=True))
+        lines = [line.strip() for line in script.splitlines()]
+        solve = max(i for i, l in enumerate(lines) if l.startswith("platesolve"))
+        snapshot = next(
+            i for i, l in enumerate(lines) if l.startswith("savejpg previews/00_stacked")
+        )
+        self.assertLess(solve, snapshot)
 
     def test_plate_solve_also_solves_the_plain_stack(self) -> None:
         """The kept file is the one many people open, so it gets coordinates too."""
@@ -164,7 +185,7 @@ class ScriptLayerTests(unittest.TestCase):
         group = build_group(scan(wide).eq_sessions, [])
         script = generate_script(group, Path("/out"), "WIDE", PostOptions(
             plate_solve=True, previews=False))
-        self.assertIn("platesolve -focal=6.7 -pixelsize=2.9 -noflip", script)
+        self.assertIn("platesolve -focal=6.7 -pixelsize=2.9", script)
 
     def test_a_session_with_no_pointing_skips_the_solve_instead_of_failing(self) -> None:
         """The wide camera writes RA/DEC of 0/0 -- an absence, not a position.
@@ -203,7 +224,7 @@ class ScriptLayerTests(unittest.TestCase):
         options.resolve()
         commands = self._commands(self._script(options))
         self.assertLess(
-            commands.index("platesolve -focal=150 -pixelsize=2 -noflip"),
+            commands.index("platesolve -focal=150 -pixelsize=2"),
             commands.index("pcc"),
         )
 
@@ -218,6 +239,104 @@ class ScriptLayerTests(unittest.TestCase):
             commands.index("subsky -rbf -samples=20 -tolerance=1.0 -smooth=0.5"),
             commands.index("pcc"),
         )
+
+    def test_a_stages_preview_number_does_not_depend_on_the_other_stages(self) -> None:
+        """The bug that made the whole thing look like it had done nothing.
+
+        The numbers used to be handed out by a counter as the script was
+        written, so with background removal switched OFF colour calibration
+        took number 01 and was saved as 01_colour.jpg. The panel only knows
+        03_colour, so it dropped that preview -- and every one after it --
+        and showed the plain stack beside the final image with nothing in
+        between. Two similar-looking pictures and no explanation.
+        """
+        from dwarf2siril.gui.preview import STAGE_LABELS
+
+        known = {key for key, _caption in STAGE_LABELS}
+        combinations = [
+            PostOptions(background_removal=True, colour_calibration=True,
+                        denoise=True, star_reduction=False, previews=True),
+            PostOptions(colour_calibration=True, denoise=True, previews=True),
+            PostOptions(denoise=True, previews=True),
+            PostOptions(plate_solve=True, previews=True),
+            PostOptions(background_removal=True, previews=True),
+        ]
+        for options in combinations:
+            options.resolve()
+            written = [
+                line.strip().split()[1].split("/")[-1]
+                for line in self._script(options).splitlines()
+                if line.strip().startswith("savejpg ")
+            ]
+            self.assertTrue(written)
+            for key in written:
+                self.assertIn(
+                    key, known,
+                    f"{key} is a preview the panel cannot show, from {options}",
+                )
+
+    def test_the_solve_gets_its_own_preview_now_that_it_can_flip(self) -> None:
+        """A step that turns the picture over must appear in the comparison."""
+        script = self._script(PostOptions(plate_solve=True, previews=True))
+        self.assertIn("savejpg previews/02_solved 90", script)
+
+    def test_stretch_runs_after_every_other_layer(self) -> None:
+        """subsky, pcc and starnet all expect LINEAR data.
+
+        Stretching before any of them hands them the wrong kind of numbers,
+        so the stretch has to be the last thing that touches the pixels.
+        """
+        options = PostOptions(
+            background_removal=True, colour_calibration=True, denoise=True,
+            stretch=True, previews=False,
+        )
+        options.resolve()
+        commands = self._commands(self._script(options))
+        stretch = commands.index("autostretch -linked")
+        for earlier in ("subsky", "platesolve", "pcc", "denoise"):
+            position = next(
+                i for i, c in enumerate(commands) if c.startswith(earlier)
+            )
+            self.assertLess(position, stretch, f"{earlier} must precede the stretch")
+
+    def test_stretch_is_linked_so_it_keeps_the_calibrated_colour(self) -> None:
+        """Unlinked re-balances the channels and throws pcc's answer away."""
+        script = self._script(PostOptions(stretch=True, previews=False))
+        self.assertIn("autostretch -linked", script)
+
+    def test_the_final_preview_is_not_stretched_twice(self) -> None:
+        """The preview autostretches linear data. Stretched data is already done.
+
+        Autostretching an already-stretched image blows the highlights out and
+        makes the finished picture look WORSE than the intermediate previews,
+        which is exactly backwards.
+        """
+        lines = [
+            line.strip()
+            for line in self._script(
+                PostOptions(stretch=True, previews=True)
+            ).splitlines()
+        ]
+        final = next(
+            i for i, l in enumerate(lines) if l.startswith("savejpg previews/99_final")
+        )
+        # Walk back to the load that starts this preview block.
+        start = max(i for i, l in enumerate(lines[:final]) if l.startswith("load "))
+        self.assertNotIn("autostretch", lines[start:final])
+
+    def test_the_plain_stack_preview_is_still_stretched(self) -> None:
+        """It is linear whatever the layers did, so it needs the stretch."""
+        lines = [
+            line.strip()
+            for line in self._script(
+                PostOptions(stretch=True, previews=True)
+            ).splitlines()
+        ]
+        stacked = next(
+            i for i, l in enumerate(lines) if l.startswith("savejpg previews/00_stacked")
+        )
+        start = max(i for i, l in enumerate(lines[:stacked]) if l.startswith("load "))
+        self.assertIn("autostretch", lines[start:stacked])
 
     def test_star_reduction_is_last_and_recombines_the_star_layer(self) -> None:
         options = PostOptions(
@@ -243,7 +362,9 @@ class ScriptLayerTests(unittest.TestCase):
         )
         self.assertIn("savejpg previews/00_stacked", script)
         self.assertIn("savejpg previews/01_background", script)
-        self.assertIn("savejpg previews/02_denoised", script)
+        # 04, not 02: denoise's number is its own and does not shuffle down
+        # when the stages before it are switched off.
+        self.assertIn("savejpg previews/04_denoised", script)
         self.assertIn("savejpg previews/99_final", script)
         self.assertIn("resample -maxdim=1600", script)
 

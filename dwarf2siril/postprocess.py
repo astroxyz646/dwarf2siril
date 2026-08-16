@@ -196,6 +196,7 @@ class PostOptions:
     plate_solve: bool = False
     colour_calibration: bool = False
     star_reduction: bool = False
+    stretch: bool = False
 
     # How much of the star layer to put back. 1.0 would be no reduction at
     # all; 0.0 would remove the stars entirely. Half is the usual starting
@@ -218,6 +219,7 @@ class PostOptions:
                 self.plate_solve,
                 self.colour_calibration,
                 self.star_reduction,
+                self.stretch,
             )
         )
 
@@ -233,6 +235,8 @@ class PostOptions:
             labels.append("denoise")
         if self.star_reduction:
             labels.append(f"star reduction ({int(self.star_amount * 100)}% stars kept)")
+        if self.stretch:
+            labels.append("stretch")
         return labels
 
     def siril_stages(self) -> list[str]:
@@ -255,6 +259,8 @@ class PostOptions:
         if self.star_reduction:
             stages.append("starnet")
             stages.append("pm")
+        if self.stretch:
+            stages.append("autostretch")
         return stages
 
     def resolve(self) -> list[str]:

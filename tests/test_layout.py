@@ -12,7 +12,9 @@ its own sentence, or a scroll area whose contents cannot fit its viewport.
 
 from __future__ import annotations
 
+import os
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -50,10 +52,26 @@ BUILT = SimpleNamespace(
 class LayoutTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
+        # MainWindow starts a real drive scan 150ms after it is built. On a
+        # developer machine that walks the actual card reader, and an empty
+        # or awkward drive raises a MODAL Windows dialog that blocks the
+        # entire test run until somebody clicks it. Layout has nothing to do
+        # with what is plugged in, so the scan is switched off.
+        os.environ["DWARF2SIRIL_NO_DRIVE_SCAN"] = "1"
+
         from dwarf2siril.gui import theme
 
         cls.app = QApplication.instance() or QApplication([])
         cls.app.setStyleSheet(theme.stylesheet())
+
+        # An empty folder standing in for a chosen card. Real path, nothing
+        # in it, so nothing is scanned and nothing can be deleted.
+        cls._tmp = tempfile.TemporaryDirectory()
+        cls._tmp_root = cls._tmp.name
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        cls._tmp.cleanup()
 
     def _window(self):
         """A window in its most demanding state: everything on screen at once."""
@@ -62,6 +80,12 @@ class LayoutTest(unittest.TestCase):
         from dwarf2siril.gui.app import MainWindow
 
         window = MainWindow()
+        # Clean-up mode REFUSES to open with no card chosen, and it refuses by
+        # popping a modal warning box. Nothing dismisses that box in a test
+        # run, so the whole suite sat there forever waiting for a click that
+        # was never coming. Pretending a card is chosen is also the only way
+        # this test ever reaches the clean-up layout it claims to check.
+        window.source_root = Path(self._tmp_root)
         # Laid out exactly as if shown, but never actually put on screen.
         window.setAttribute(Qt.WidgetAttribute.WA_DontShowOnScreen, True)
         window.show()
@@ -223,7 +247,6 @@ class LayoutTest(unittest.TestCase):
                     )
         finally:
             window.close()
-
 
 if __name__ == "__main__":
     unittest.main()
