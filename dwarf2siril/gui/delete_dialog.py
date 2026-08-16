@@ -71,14 +71,16 @@ class DeleteDialog(QDialog):
         self.setStyleSheet(f"background: {theme.BG};")
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 18, 20, 16)
-        layout.setSpacing(12)
+        layout.setContentsMargins(
+            theme.SPACE_5, theme.SPACE_5, theme.SPACE_5, theme.SPACE_4
+        )
+        layout.setSpacing(theme.SPACE_3)
 
         headline = QLabel(
             f"Delete {request.what}"
             + (f" from {request.where_from}?" if request.where_from else "?")
         )
-        headline.setStyleSheet("font-size: 14pt; font-weight: 600;")
+        headline.setObjectName("DialogTitle")
         headline.setWordWrap(True)
         layout.addWidget(headline)
 
@@ -122,15 +124,9 @@ class DeleteDialog(QDialog):
             listing.setReadOnly(True)
             listing.setPlainText("\n".join(request.detail))
             listing.setMaximumHeight(150)
-            listing.setStyleSheet(
-                f"background: {theme.SURFACE}; border: 1px solid {theme.BORDER}; "
-                # Matches the run panel's log, which is the same thing: a
-                # bordered box of monospace lines. Without it the first
-                # filename in the list of what is about to be deleted sits
-                # hard against the border.
-                f"border-radius: 6px; padding: 9px; font-family: {theme.MONO_STACK}; "
-                f"font-size: 8.5pt; color: {theme.TEXT_MUTED};"
-            )
+            # Styled in theme.py alongside the run panel's log, which is the
+            # same thing: a padded, bordered box of monospace lines.
+            listing.setObjectName("Listing")
             layout.addWidget(listing)
 
         # A larger loss costs a larger gesture. A frame is one click; a whole
@@ -154,10 +150,6 @@ class DeleteDialog(QDialog):
             "Delete permanently" if not self.recycles else "Move to Recycle Bin"
         )
         self.delete_button.setObjectName("Danger")
-        self.delete_button.setStyleSheet(
-            f"background: {theme.ERROR}; color: #1A0806; border: none; "
-            f"border-radius: 6px; padding: 7px 16px; font-weight: 650;"
-        )
         cancel = buttons.button(QDialogButtonBox.StandardButton.Cancel)
         cancel.setObjectName("Ghost")
         buttons.accepted.connect(self.accept)

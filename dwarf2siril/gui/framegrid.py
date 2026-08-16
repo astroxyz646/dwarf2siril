@@ -114,14 +114,12 @@ class FrameTile(QWidget):
         self.image.setFixedSize(TILE_WIDTH, TILE_HEIGHT)
         self.image.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.image.setText("no preview" if item.thumbnail is None else "")
-        self.image.setStyleSheet(
-            f"background: {theme.BG}; border: 1px solid {theme.BORDER}; "
-            f"border-radius: 4px; color: {theme.TEXT_FAINT}; font-size: 8pt;"
-        )
+        # No initial sheet here: _restyle() below paints it, and one place
+        # deciding how a tile looks is one place to change it.
         layout.addWidget(self.image)
 
         self.caption = QLabel(f"#{item.index + 1}")
-        self.caption.setStyleSheet(f"color: {theme.TEXT_FAINT}; font-size: 8pt;")
+        self.caption.setObjectName("Caption")
         layout.addWidget(self.caption)
 
         if item.thumbnail is not None:
@@ -150,11 +148,18 @@ class FrameTile(QWidget):
         self._restyle()
 
     def _restyle(self) -> None:
+        # Chosen is a 2px accent edge; merely hovered is a 1px pale one. The
+        # difference in weight, not just colour, is what keeps a pointer
+        # passing over a tile from looking like a tile you picked.
         border = theme.ACCENT if self.selected else theme.BORDER
         width = 2 if self.selected else 1
+        hover = theme.ACCENT if self.selected else theme.BORDER_STRONG
         self.image.setStyleSheet(
-            f"background: {theme.BG}; border: {width}px solid {border}; "
-            f"border-radius: 4px; color: {theme.TEXT_FAINT}; font-size: 8pt;"
+            f"QLabel {{ background: {theme.BG}; "
+            f"border: {width}px solid {border}; "
+            f"border-radius: {theme.RADIUS_XS + 2}px; "
+            f"color: {theme.TEXT_FAINT}; font-size: 8pt; }}"
+            f"QLabel:hover {{ border-color: {hover}; }}"
         )
         bits = [f"#{self.item.index + 1}"]
         colour = theme.TEXT_FAINT
@@ -192,11 +197,13 @@ class StackGridWindow(QDialog):
         self.resize(1120, 760)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 14, 16, 12)
-        layout.setSpacing(10)
+        layout.setContentsMargins(
+            theme.SPACE_4, theme.SPACE_4, theme.SPACE_4, theme.SPACE_3
+        )
+        layout.setSpacing(theme.SPACE_3)
 
         header = QHBoxLayout()
-        header.setSpacing(12)
+        header.setSpacing(theme.SPACE_3)
         title = QLabel(f"{session.display_target} — every frame")
         title.setObjectName("CardTitle")
         header.addWidget(title)
@@ -219,12 +226,12 @@ class StackGridWindow(QDialog):
         area.setWidgetResizable(True)
         area.setStyleSheet("border: none;")
         self._host = QWidget()
-        self._grid = FlowLayout(self._host, margin=0, spacing=10)
+        self._grid = FlowLayout(self._host, margin=0, spacing=theme.SPACE_3)
         area.setWidget(self._host)
         layout.addWidget(area, 1)
 
         footer = QHBoxLayout()
-        footer.setSpacing(10)
+        footer.setSpacing(theme.SPACE_3)
         self.selection_label = QLabel("")
         self.selection_label.setWordWrap(True)
         footer.addWidget(self.selection_label, 1)
@@ -234,11 +241,8 @@ class StackGridWindow(QDialog):
         footer.addWidget(hint)
 
         self.delete_button = QPushButton("Delete selected")
+        self.delete_button.setObjectName("Danger")
         self.delete_button.setEnabled(False)
-        self.delete_button.setStyleSheet(
-            f"background: {theme.ERROR}; color: #1A0806; border: none; "
-            f"border-radius: 6px; padding: 7px 14px; font-weight: 650;"
-        )
         self.delete_button.clicked.connect(self._delete_selected)
         footer.addWidget(self.delete_button)
 
@@ -392,16 +396,20 @@ class FrameViewer(QDialog):
 
         self.view = QLabel()
         self.view.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.view.setStyleSheet(f"background: #05070A; color: {theme.TEXT_MUTED};")
+        self.view.setStyleSheet(
+            f"background: {theme.BG_SUNKEN}; color: {theme.TEXT_MUTED};"
+        )
         layout.addWidget(self.view, 1)
 
         bar = QWidget()
         # No rule above the bar: this one sits against a near-black viewer,
         # so the surface change is already the strongest edge in the window.
-        bar.setStyleSheet(f"background: {theme.SURFACE};")
+        bar.setObjectName("Chrome")
         bar_layout = QHBoxLayout(bar)
-        bar_layout.setContentsMargins(16, 10, 16, 10)
-        bar_layout.setSpacing(12)
+        bar_layout.setContentsMargins(
+            theme.SPACE_4, theme.SPACE_3, theme.SPACE_4, theme.SPACE_3
+        )
+        bar_layout.setSpacing(theme.SPACE_3)
 
         previous = QPushButton("‹  Previous")
         previous.setObjectName("Ghost")
@@ -418,10 +426,7 @@ class FrameViewer(QDialog):
         bar_layout.addWidget(nxt)
 
         self.delete_button = QPushButton("Delete this frame")
-        self.delete_button.setStyleSheet(
-            f"background: {theme.ERROR}; color: #1A0806; border: none; "
-            f"border-radius: 6px; padding: 7px 14px; font-weight: 650;"
-        )
+        self.delete_button.setObjectName("Danger")
         self.delete_button.clicked.connect(self._delete_current)
         bar_layout.addWidget(self.delete_button)
 

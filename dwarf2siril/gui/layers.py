@@ -69,12 +69,12 @@ class LayerRow(QWidget):
         layout.addWidget(self.checkbox)
 
         self.detail = _label(detail, "Faint")
-        self.detail.setContentsMargins(22, 0, 0, 0)
+        self.detail.setContentsMargins(theme.SPACE_6, 0, 0, 0)
         self.detail.hide()
         layout.addWidget(self.detail)
 
         self.warning = _label("", "Faint")
-        self.warning.setContentsMargins(22, 0, 0, 0)
+        self.warning.setContentsMargins(theme.SPACE_6, 0, 0, 0)
         self.warning.setTextFormat(Qt.TextFormat.RichText)
         if warning:
             self.warning.setText(
@@ -120,8 +120,10 @@ class LayersCard(QFrame):
         self._restoring = True
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(14, 12, 14, 12)
-        layout.setSpacing(4)
+        layout.setContentsMargins(
+            theme.SPACE_4, theme.SPACE_3, theme.SPACE_4, theme.SPACE_3
+        )
+        layout.setSpacing(theme.SPACE_1)
 
         layout.addWidget(_label("EXTRAS", "Faint"))
         layout.addWidget(
@@ -192,11 +194,11 @@ class LayersCard(QFrame):
         self.amount_box = QWidget()
         self.amount_box.setObjectName("Plain")
         amount_layout = QVBoxLayout(self.amount_box)
-        amount_layout.setContentsMargins(28, 0, 0, 6)
+        amount_layout.setContentsMargins(theme.SPACE_6 + 4, 0, 0, theme.SPACE_2)
         amount_layout.setSpacing(4)
 
         slider_row = QHBoxLayout()
-        slider_row.setSpacing(10)
+        slider_row.setSpacing(theme.SPACE_3)
         slider_row.addWidget(_label("Keep", "Faint", wrap=False))
         self.amount = QSlider(Qt.Orientation.Horizontal)
         self.amount.setRange(0, 100)
@@ -249,7 +251,7 @@ class LayersCard(QFrame):
             # The cost goes on screen, not in a tooltip. Losing 80% of the
             # picture is not something to discover after the fact.
             blurb = _label(FRAMING_BLURB[key], "Faint")
-            blurb.setContentsMargins(22, 0, 8, 4)
+            blurb.setContentsMargins(theme.SPACE_6, 0, theme.SPACE_2, theme.SPACE_1)
             framing_layout.addWidget(blurb)
 
         # buttonClicked fires only on real user interaction, unlike
@@ -266,7 +268,7 @@ class LayersCard(QFrame):
         # default and shapes the stack itself -- so it gets its own line and
         # its own words rather than sitting among the optional layers.
         filter_row = QHBoxLayout()
-        filter_row.setSpacing(8)
+        filter_row.setSpacing(theme.SPACE_2)
         filter_label = _label("Drop bad frames", wrap=False)
         filter_label.setToolTip(
             "Frames ruined by cloud, wind or poor seeing are left out of the "

@@ -71,8 +71,10 @@ class RunPanel(QFrame):
         self.worker: SirilWorker | None = None
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(14, 13, 14, 13)
-        layout.setSpacing(11)
+        layout.setContentsMargins(
+            theme.SPACE_4, theme.SPACE_3, theme.SPACE_4, theme.SPACE_3
+        )
+        layout.setSpacing(theme.SPACE_3)
 
         self.heading = _label("", "CardTitle")
         self.heading.setWordWrap(True)
@@ -86,7 +88,7 @@ class RunPanel(QFrame):
         # room for a row of equals, and this is not an equal: everything
         # else here is a fallback for when it does not work.
         run_row = QHBoxLayout()
-        run_row.setSpacing(8)
+        run_row.setSpacing(theme.SPACE_2)
         self.stack_button = QPushButton("Stack now in Siril")
         self.stack_button.setObjectName("Primary")
         self.stack_button.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -109,7 +111,7 @@ class RunPanel(QFrame):
         # buttons would have set the minimum width of the whole window.
         secondary_host = QWidget()
         secondary_host.setObjectName("Plain")
-        secondary = FlowLayout(secondary_host, margin=0, spacing=6)
+        secondary = FlowLayout(secondary_host, margin=0, spacing=theme.SPACE_2)
 
         self.locate_button = QPushButton("Locate Siril...")
         self.locate_button.setObjectName("Ghost")
@@ -129,13 +131,11 @@ class RunPanel(QFrame):
         # -- the command, always here -----------------------------------
         layout.addWidget(_label("RUN IT YOURSELF", "Faint"))
         command_row = QHBoxLayout()
-        command_row.setSpacing(8)
+        command_row.setSpacing(theme.SPACE_2)
         self.command_field = QLineEdit()
         self.command_field.setReadOnly(True)
         self.command_field.setMinimumWidth(80)   # may shrink; must not force width
-        self.command_field.setStyleSheet(
-            f"font-family: {theme.MONO_STACK}; font-size: 9pt;"
-        )
+        self.command_field.setObjectName("Mono")
         command_row.addWidget(self.command_field, 1)
 
         self.copy_button = QPushButton("Copy")
@@ -155,7 +155,10 @@ class RunPanel(QFrame):
         self.busy.hide()
         layout.addWidget(self.busy)
 
-        self.stage_line = _label("", "Muted", wrap=True)
+        # Coloured RUNNING, matching the bar right above it, so "work is
+        # happening" is one signal in one colour rather than a grey sentence
+        # under a coloured bar.
+        self.stage_line = _label("", "Running", wrap=True)
         self.stage_line.hide()
         layout.addWidget(self.stage_line)
 
@@ -163,12 +166,7 @@ class RunPanel(QFrame):
         self.log.setReadOnly(True)
         self.log.setMaximumBlockCount(MAX_LOG_LINES)
         self.log.setMinimumHeight(170)
-        self.log.setStyleSheet(
-            f"background: {theme.BG}; border: 1px solid {theme.BORDER}; "
-            f"border-radius: 8px; padding: 10px; "
-            f"font-family: {theme.MONO_STACK}; font-size: 9pt; "
-            f"color: {theme.TEXT_MUTED};"
-        )
+        self.log.setObjectName("Log")
         self.log.hide()
         layout.addWidget(self.log)
 

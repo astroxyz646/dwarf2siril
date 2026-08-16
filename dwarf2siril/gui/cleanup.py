@@ -59,7 +59,7 @@ class CleanupPanel(QWidget):
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(10)
+        layout.setSpacing(theme.SPACE_3)
 
         title = QLabel("Clean up your DWARF card")
         title.setObjectName("CardTitle")
@@ -75,15 +75,8 @@ class CleanupPanel(QWidget):
         self.tree.setRootIsDecorated(False)
         self.tree.setAlternatingRowColors(False)
         self.tree.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
-        self.tree.setStyleSheet(
-            f"QTreeWidget {{ background: {theme.SURFACE}; "
-            f"border: 1px solid {theme.BORDER}; border-radius: 8px; }}"
-            # 8px at the sides, not 2. The first column's tick and the last
-            # column's sentence both ran up against the tree's own border.
-            f"QTreeWidget::item {{ padding: 5px 8px; }}"
-            f"QHeaderView::section {{ background: {theme.SURFACE_RAISED}; "
-            f"color: {theme.TEXT_FAINT}; border: none; padding: 6px; }}"
-        )
+        # Surface, border, row padding and header are all in theme.py: this
+        # is the only tree in the app, but its colours are not its own.
         # Tall enough to show a whole card's worth of folders without
         # scrolling. As a mode rather than a dialog this panel shares a
         # scrolling column, so it has to ask for its height rather than
@@ -97,7 +90,7 @@ class CleanupPanel(QWidget):
         layout.addWidget(self.selection_label)
 
         buttons = QHBoxLayout()
-        buttons.setSpacing(10)
+        buttons.setSpacing(theme.SPACE_3)
         note = QLabel(
             "Nothing is selected for you. Tick only what you want gone."
         )
@@ -106,11 +99,8 @@ class CleanupPanel(QWidget):
         buttons.addWidget(note, 1)
 
         self.delete_button = QPushButton("Delete selected")
+        self.delete_button.setObjectName("Danger")
         self.delete_button.setEnabled(False)
-        self.delete_button.setStyleSheet(
-            f"background: {theme.ERROR}; color: #1A0806; border: none; "
-            f"border-radius: 6px; padding: 7px 16px; font-weight: 650;"
-        )
         self.delete_button.clicked.connect(self._delete_selected)
         buttons.addWidget(self.delete_button)
         layout.addLayout(buttons)
@@ -298,8 +288,10 @@ class CleanupWindow(QDialog):
         self.resize(920, 620)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(18, 16, 18, 14)
-        layout.setSpacing(10)
+        layout.setContentsMargins(
+            theme.SPACE_5, theme.SPACE_4, theme.SPACE_5, theme.SPACE_4
+        )
+        layout.setSpacing(theme.SPACE_3)
 
         self.panel = CleanupPanel(card_root, sessions, self)
         self.panel.changed.connect(self.changed.emit)

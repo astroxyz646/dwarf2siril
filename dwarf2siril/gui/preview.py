@@ -126,7 +126,7 @@ class SwipeView(QWidget):
 
     def paintEvent(self, event) -> None:  # noqa: N802 - Qt naming
         painter = QPainter(self)
-        painter.fillRect(self.rect(), QColor(theme.BG))
+        painter.fillRect(self.rect(), QColor(theme.BG_SUNKEN))
 
         rect = self._target_rect()
         if rect.isEmpty():
@@ -218,10 +218,13 @@ class PreviewPanel(QFrame):
         self.solved_note = ""
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(22, 20, 22, 20)
-        layout.setSpacing(14)
+        layout.setContentsMargins(
+            theme.SPACE_5, theme.SPACE_5, theme.SPACE_5, theme.SPACE_5
+        )
+        layout.setSpacing(theme.SPACE_4)
 
         header = QHBoxLayout()
+        header.setSpacing(theme.SPACE_2)
         title = QLabel("Before and after")
         title.setObjectName("CardTitle")
         header.addWidget(title)
@@ -274,6 +277,7 @@ class PreviewPanel(QFrame):
         )
 
         footer = QHBoxLayout()
+        footer.setSpacing(theme.SPACE_3)
         self.file_note = QLabel("")
         self.file_note.setObjectName("Faint")
         self.file_note.setWordWrap(True)

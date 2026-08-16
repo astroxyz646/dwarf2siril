@@ -425,7 +425,7 @@ def _give_room(root) -> bool:
 def _explainer(text: str) -> QLabel:
     """A wrapped note under a tick box, indented to line up with its label."""
     label = _label(text, "Faint", wrap=True)
-    label.setContentsMargins(22, 0, 0, 2)
+    label.setContentsMargins(theme.SPACE_6, 0, 0, 2)
     return label
 
 
@@ -439,11 +439,10 @@ def _step_heading(number: int, title: str, hint: str) -> QWidget:
     # Step number and title on one line rather than stacked: the number is a
     # small marker, not a heading in its own right.
     top = QHBoxLayout()
-    top.setSpacing(8)
+    top.setSpacing(theme.SPACE_2)
     if number:
         top.addWidget(_label(f"STEP {number}", "StepLabel"))
-    heading = _label(title)
-    heading.setStyleSheet("font-size: 12.5pt; font-weight: 600;")
+    heading = _label(title, "SectionHeading")
     top.addWidget(heading)
     top.addStretch(1)
     layout.addLayout(top)
@@ -532,8 +531,10 @@ class MainWindow(QWidget):
         )
         body = QWidget()
         self.body_layout = QVBoxLayout(body)
-        self.body_layout.setContentsMargins(20, 14, 20, 16)
-        self.body_layout.setSpacing(14)
+        self.body_layout.setContentsMargins(
+            theme.SPACE_6, theme.SPACE_4, theme.SPACE_6, theme.SPACE_4
+        )
+        self.body_layout.setSpacing(theme.SPACE_4)
         self.main_scroll.setWidget(body)
         middle.addWidget(self.main_scroll, 1)
 
@@ -554,7 +555,7 @@ class MainWindow(QWidget):
         self.results_area = QWidget()
         self.results_layout = QVBoxLayout(self.results_area)
         self.results_layout.setContentsMargins(0, 0, 0, 0)
-        self.results_layout.setSpacing(12)
+        self.results_layout.setSpacing(theme.SPACE_3)
         self.body_layout.addWidget(self.results_area)
         self.results_area.hide()
 
@@ -593,8 +594,10 @@ class MainWindow(QWidget):
         outer.setSpacing(0)
 
         head = QHBoxLayout()
-        head.setContentsMargins(16, 11, 8, 10)
-        head.setSpacing(6)
+        head.setContentsMargins(
+            theme.SPACE_4, theme.SPACE_3, theme.SPACE_2, theme.SPACE_3
+        )
+        head.setSpacing(theme.SPACE_2)
         self.sidebar_title = _label("Output & stacking", "SidebarTitle")
         head.addWidget(self.sidebar_title)
         head.addStretch(1)
@@ -610,8 +613,10 @@ class MainWindow(QWidget):
         content = _ScrollColumn()
         content.setObjectName("Plain")
         self.sidebar_layout = QVBoxLayout(content)
-        self.sidebar_layout.setContentsMargins(14, 13, 12, 16)
-        self.sidebar_layout.setSpacing(11)
+        self.sidebar_layout.setContentsMargins(
+            theme.SPACE_4, theme.SPACE_3, theme.SPACE_4, theme.SPACE_4
+        )
+        self.sidebar_layout.setSpacing(theme.SPACE_3)
 
         self.sidebar_layout.addWidget(
             _step_heading(
@@ -703,8 +708,10 @@ class MainWindow(QWidget):
         card = QFrame()
         card.setObjectName("Card")
         inner = QVBoxLayout(card)
-        inner.setContentsMargins(14, 12, 14, 12)
-        inner.setSpacing(8)
+        inner.setContentsMargins(
+            theme.SPACE_4, theme.SPACE_3, theme.SPACE_4, theme.SPACE_3
+        )
+        inner.setSpacing(theme.SPACE_2)
         inner.addWidget(
             _label(
                 "Pick out the frames a passing cloud, a knock or a satellite "
@@ -742,8 +749,10 @@ class MainWindow(QWidget):
         card = QFrame()
         card.setObjectName("Card")
         inner = QVBoxLayout(card)
-        inner.setContentsMargins(14, 12, 14, 12)
-        inner.setSpacing(9)
+        inner.setContentsMargins(
+            theme.SPACE_4, theme.SPACE_3, theme.SPACE_4, theme.SPACE_3
+        )
+        inner.setSpacing(theme.SPACE_2)
         for text, name in (
             ("Nothing is ever ticked for you. You choose what goes.", "Muted"),
             ("A DWARF card has no Recycle Bin, so what you remove from it is "
@@ -763,8 +772,8 @@ class MainWindow(QWidget):
         rail.setObjectName("SidebarRail")
         rail.setFixedWidth(RAIL_WIDTH)
         layout = QVBoxLayout(rail)
-        layout.setContentsMargins(0, 10, 0, 10)
-        layout.setSpacing(6)
+        layout.setContentsMargins(0, theme.SPACE_3, 0, theme.SPACE_3)
+        layout.setSpacing(theme.SPACE_2)
 
         unfold = QPushButton("‹")
         unfold.setObjectName("SidebarToggle")
@@ -775,9 +784,8 @@ class MainWindow(QWidget):
 
         # One letter per line rather than a rotated label: rotation needs a
         # custom paint, and at this size the stack is just as readable.
-        word = _label("\n".join("OUTPUT"), "Faint")
+        word = _label("\n".join("OUTPUT"), "Rail")
         word.setAlignment(Qt.AlignmentFlag.AlignHCenter)
-        word.setStyleSheet(f"color: {theme.TEXT_FAINT}; font-size: 7.5pt;")
         layout.addWidget(word, 0, Qt.AlignmentFlag.AlignHCenter)
         layout.addStretch(1)
 
@@ -903,13 +911,15 @@ class MainWindow(QWidget):
         # colour, so a line here cut across what is otherwise one continuous
         # surface -- which is what the operator noticed. The change of
         # background against the body below is the separation.
-        holder.setStyleSheet(f"background: {theme.SURFACE};")
+        holder.setObjectName("Chrome")
         layout = QHBoxLayout(holder)
-        layout.setContentsMargins(20, 12, 20, 14)
-        layout.setSpacing(20)
+        layout.setContentsMargins(
+            theme.SPACE_6, theme.SPACE_4, theme.SPACE_6, theme.SPACE_4
+        )
+        layout.setSpacing(theme.SPACE_6)
 
         titles = QVBoxLayout()
-        titles.setSpacing(4)
+        titles.setSpacing(theme.SPACE_1)
         titles.addWidget(_label("Dwarf2Siril", "Title"))
         titles.addWidget(
             _label(
@@ -927,7 +937,7 @@ class MainWindow(QWidget):
         bar.setObjectName("ModeBar")
         row = QHBoxLayout(bar)
         row.setContentsMargins(3, 3, 3, 3)
-        row.setSpacing(2)
+        row.setSpacing(theme.SPACE_1 // 2)
 
         self.mode_buttons: dict[str, QPushButton] = {}
         for key, label, hint in MODES:
@@ -946,18 +956,20 @@ class MainWindow(QWidget):
         card = QFrame()
         card.setObjectName("Card")
         layout = QVBoxLayout(card)
-        layout.setContentsMargins(14, 12, 14, 12)
-        layout.setSpacing(8)
+        layout.setContentsMargins(
+            theme.SPACE_4, theme.SPACE_3, theme.SPACE_4, theme.SPACE_3
+        )
+        layout.setSpacing(theme.SPACE_3)
 
         self.drive_status = _label("Looking for DWARF 3 drives...", "Muted")
         layout.addWidget(self.drive_status)
 
         self.drive_row = QHBoxLayout()
-        self.drive_row.setSpacing(12)
+        self.drive_row.setSpacing(theme.SPACE_3)
         layout.addLayout(self.drive_row)
 
         picker = QHBoxLayout()
-        picker.setSpacing(12)
+        picker.setSpacing(theme.SPACE_2)
         self.source_field = QLineEdit()
         self.source_field.setPlaceholderText("or choose the folder yourself...")
         self.source_field.setReadOnly(True)
@@ -993,10 +1005,12 @@ class MainWindow(QWidget):
     def _footer(self) -> QWidget:
         holder = QWidget()
         # Same reasoning as the header: the raised surface is the separator.
-        holder.setStyleSheet(f"background: {theme.SURFACE};")
+        holder.setObjectName("Chrome")
         layout = QVBoxLayout(holder)
-        layout.setContentsMargins(20, 10, 20, 11)
-        layout.setSpacing(8)
+        layout.setContentsMargins(
+            theme.SPACE_6, theme.SPACE_3, theme.SPACE_6, theme.SPACE_3
+        )
+        layout.setSpacing(theme.SPACE_2)
 
         self.progress = QProgressBar()
         self.progress.setTextVisible(False)
@@ -1142,7 +1156,7 @@ class MainWindow(QWidget):
         # A reflowing grid rather than one card per row: the window decides
         # how many fit across, so several targets can be compared at a glance.
         grid_host = QWidget()
-        grid = FlowLayout(grid_host, margin=0, spacing=12)
+        grid = FlowLayout(grid_host, margin=0, spacing=theme.SPACE_3)
         for group in groups:
             card = GroupCard(group)
             card.changed.connect(lambda c=card: self._regroup(c))
@@ -1234,11 +1248,13 @@ class MainWindow(QWidget):
         card = QFrame()
         card.setObjectName("Card")
         layout = QVBoxLayout(card)
-        layout.setContentsMargins(14, 12, 14, 12)
-        layout.setSpacing(14)
+        layout.setContentsMargins(
+            theme.SPACE_4, theme.SPACE_3, theme.SPACE_4, theme.SPACE_3
+        )
+        layout.setSpacing(theme.SPACE_4)
 
         row = QHBoxLayout()
-        row.setSpacing(8)
+        row.setSpacing(theme.SPACE_2)
         self.output_field = QLineEdit()
         self.output_field.setPlaceholderText("Where should the Siril project go?")
         self.output_field.setReadOnly(True)

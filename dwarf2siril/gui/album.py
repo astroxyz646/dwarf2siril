@@ -52,8 +52,10 @@ class AlbumWindow(QDialog):
         )
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(14, 12, 14, 12)
-        layout.setSpacing(10)
+        layout.setContentsMargins(
+            theme.SPACE_4, theme.SPACE_3, theme.SPACE_4, theme.SPACE_3
+        )
+        layout.setSpacing(theme.SPACE_3)
 
         self.view = QLabel("Opening the picture...")
         self.view.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -65,7 +67,7 @@ class AlbumWindow(QDialog):
         layout.addWidget(self.view, 1)
 
         footer = QHBoxLayout()
-        footer.setSpacing(12)
+        footer.setSpacing(theme.SPACE_3)
         caption = QLabel(
             "This is your DWARF's own live-stacked picture, straight off the "
             "card — not the result of this tool."

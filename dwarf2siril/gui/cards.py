@@ -110,25 +110,16 @@ class DriveTile(QPushButton):
         # the layout only knows about these margins. The stylesheet said
         # `padding: 16px 18px` and looked right on the page while the tile on
         # screen had 4px at the sides and 2px top and bottom, which is why
-        # the title sat against the top edge and the amber line against the
+        # the title sat against the top edge and the accent line against the
         # bottom one.
-        layout.setContentsMargins(18, 14, 18, 14)
-        layout.setSpacing(2)
-
-        title = _label(label)
-        title.setStyleSheet("font-size: 11pt; font-weight: 600;")
-        layout.addWidget(title)
-
-        path_label = _label(path_text)
-        path_label.setStyleSheet(
-            f"color: {theme.TEXT_MUTED}; font-family: {theme.MONO_STACK}; "
-            f"font-size: 8.5pt;"
+        layout.setContentsMargins(
+            theme.SPACE_4, theme.SPACE_3, theme.SPACE_4, theme.SPACE_3
         )
-        layout.addWidget(path_label)
+        layout.setSpacing(theme.SPACE_1 // 2)
 
-        detail_label = _label(detail)
-        detail_label.setStyleSheet(f"color: {theme.ACCENT}; font-size: 8.5pt;")
-        layout.addWidget(detail_label)
+        layout.addWidget(_label(label, "RowTitle"))
+        layout.addWidget(_label(path_text, "Path"))
+        layout.addWidget(_label(detail, "Detail"))
 
 
 class SessionRow(QWidget):
@@ -142,7 +133,7 @@ class SessionRow(QWidget):
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 1, 0, 1)
-        layout.setSpacing(7)
+        layout.setSpacing(theme.SPACE_2)
 
         self.checkbox = QCheckBox()
         self.checkbox.setChecked(True)
@@ -152,9 +143,7 @@ class SessionRow(QWidget):
         text = QVBoxLayout()
         text.setSpacing(0)
         when = session.started or session.path.name
-        row = _label(f"{when}  ·  {session.frame_count} frames")
-        row.setStyleSheet("font-size: 9pt;")
-        text.addWidget(row)
+        text.addWidget(_label(f"{when}  ·  {session.frame_count} frames", "Body"))
 
         # The DWARF's own live stacker forms an opinion about frame quality;
         # how many it threw away is a fair summary of how the night went.
@@ -190,12 +179,14 @@ class GroupCard(QFrame):
         self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
 
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(14, 12, 14, 12)
-        outer.setSpacing(7)
+        outer.setContentsMargins(
+            theme.SPACE_4, theme.SPACE_3, theme.SPACE_4, theme.SPACE_3
+        )
+        outer.setSpacing(theme.SPACE_2)
 
         # -- headline: target + status ----------------------------------
         head = QHBoxLayout()
-        head.setSpacing(7)
+        head.setSpacing(theme.SPACE_2)
         self.title = _label(group.display_target, "CardTitle")
         head.addWidget(self.title)
         self.status_pill = _label("")
@@ -217,9 +208,9 @@ class GroupCard(QFrame):
         # rather than above or below is what keeps it free: the card is no
         # taller than it was before thumbnails existed.
         body = QHBoxLayout()
-        body.setSpacing(10)
+        body.setSpacing(theme.SPACE_3)
         left = QVBoxLayout()
-        left.setSpacing(7)
+        left.setSpacing(theme.SPACE_2)
 
         # -- one line of settings, not six labelled columns --------------
         first = group.sessions[0]
@@ -238,17 +229,15 @@ class GroupCard(QFrame):
 
         # -- the two numbers that matter, given room ---------------------
         figures = QHBoxLayout()
-        figures.setSpacing(16)
-        self.frames_value = _label("")
-        self.frames_value.setStyleSheet("font-size: 15pt; font-weight: 600;")
+        figures.setSpacing(theme.SPACE_6)
+        self.frames_value = _label("", "Figure")
         frames_block = QVBoxLayout()
         frames_block.setSpacing(0)
         frames_block.addWidget(self.frames_value)
         frames_block.addWidget(_label("frames", "Faint"))
         figures.addLayout(frames_block)
 
-        self.integration_value = _label("")
-        self.integration_value.setStyleSheet("font-size: 15pt; font-weight: 600;")
+        self.integration_value = _label("", "Figure")
         integration_block = QVBoxLayout()
         integration_block.setSpacing(0)
         integration_block.addWidget(self.integration_value)
@@ -303,7 +292,7 @@ class GroupCard(QFrame):
 
         # -- actions -----------------------------------------------------
         actions = QHBoxLayout()
-        actions.setSpacing(6)
+        actions.setSpacing(theme.SPACE_2)
         self.detail_button = QPushButton("Details")
         self.detail_button.setObjectName("Link")
         self.detail_button.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -357,7 +346,8 @@ class GroupCard(QFrame):
             self.thumbnail_label.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
             self.thumbnail_label.setStyleSheet(
                 f"QLabel {{ background: {theme.BG}; "
-                f"border: 1px solid {theme.BORDER}; border-radius: 4px; }}"
+                f"border: 1px solid {theme.BORDER}; "
+                f"border-radius: {theme.RADIUS_XS + 2}px; }}"
                 f"QLabel:hover {{ border: 1px solid {theme.ACCENT}; }}"
             )
             self.thumbnail_label.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -368,7 +358,7 @@ class GroupCard(QFrame):
         else:
             self.thumbnail_label.setStyleSheet(
                 f"background: {theme.BG}; border: 1px solid {theme.BORDER}; "
-                f"border-radius: 4px;"
+                f"border-radius: {theme.RADIUS_XS + 2}px;"
             )
         layout.addWidget(self.thumbnail_label)
 
@@ -620,11 +610,10 @@ def _shorten(text: str, limit: int = 74) -> str:
 
 
 def _issue_label(message: str, colour: str, prefix: str) -> QLabel:
-    label = _label("", wrap=True)
+    label = _label("", "Small", wrap=True)
     label.setTextFormat(Qt.TextFormat.RichText)
     label.setText(
         f'<span style="color:{colour};font-weight:600;">{prefix}:</span> '
         f'<span style="color:{theme.TEXT_MUTED};">{message}</span>'
     )
-    label.setStyleSheet("font-size: 8.5pt;")
     return label
