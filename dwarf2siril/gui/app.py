@@ -1392,10 +1392,17 @@ class MainWindow(QWidget):
         if not ok or self.preview_panel is None or self._last_output_dir is None:
             return
         try:
+            # The options themselves, not a list of labels made from them.
+            # The panel needs to know what was TICKED to explain what is
+            # missing, and solvability is why the two layers that can go
+            # missing without anything going wrong do so.
             shown = self.preview_panel.load_from(
                 self._last_output_dir,
                 self._last_stack_name,
-                self._last_post.enabled_labels() if self._last_post else [],
+                self._last_post,
+                self._last_group.can_plate_solve
+                if self._last_group is not None
+                else True,
             )
         except Exception:  # noqa: BLE001 - a preview is never worth failing over
             shown = False

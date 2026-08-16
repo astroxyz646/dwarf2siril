@@ -239,6 +239,68 @@ class PostOptions:
             labels.append("stretch")
         return labels
 
+    def expected_previews(self, solvable: bool = True) -> list[tuple[str, str, str]]:
+        """Every ticked layer, the preview it should produce, and why not.
+
+        Returns ``(stage key, what the user ticked, why there is no preview)``
+        for each enabled layer, with an empty reason when the layer really is
+        expected to leave a picture behind.
+
+        THIS EXISTS SO THE BEFORE/AFTER PANEL CAN STOP GUESSING. The panel
+        used to work out what to show by listing the JPEGs on disk, and work
+        out what to claim by listing the ticked boxes, and nothing compared
+        the two. A layer that produced no preview was therefore named in
+        "Applied:" and absent from the dropdowns, with no word about why --
+        which reads as the layer having quietly done nothing.
+
+        The reasons are the same ones the script itself writes into its
+        comments, said in the user's words rather than Siril's. Kept here,
+        beside the options that cause them, so the panel and the script
+        cannot drift into disagreeing about what a run was supposed to do.
+        """
+        no_pointing = (
+            "these frames record no pointing at all -- the wide camera "
+            "writes zero for the coordinates, which is an absence rather "
+            "than a position -- so there was nothing to seed a solve with"
+        )
+        expected: list[tuple[str, str, str]] = []
+        if self.background_removal:
+            expected.append(("01_background", "Remove background gradient", ""))
+        if self.plate_solve:
+            expected.append(
+                ("02_solved", "Plate solve", "" if solvable else no_pointing)
+            )
+        if self.colour_calibration:
+            expected.append(
+                (
+                    "03_colour",
+                    "Photometric colour calibration",
+                    ""
+                    if solvable
+                    else "it sets the colour from the measured brightness of "
+                    "known stars, so it needs the image solved first, and "
+                    "this one could not be",
+                )
+            )
+        if self.denoise:
+            expected.append(("04_denoised", "Denoise", ""))
+        if self.star_reduction:
+            expected.append(("05_stars_reduced", "Reduce stars", ""))
+        if self.stretch:
+            # No stage of its own, by design rather than by failure: it runs
+            # last and what it produces IS the final image. Listed anyway,
+            # because "ticked and not in the list" is the exact thing that
+            # needs explaining, and silence is what caused the confusion.
+            expected.append(
+                (
+                    "",
+                    "Stretch it into a picture",
+                    "it runs last, so what it produced is the Final image "
+                    "itself rather than a step before it",
+                )
+            )
+        return expected
+
     def siril_stages(self) -> list[str]:
         """The Siril commands these layers will produce, in script order.
 

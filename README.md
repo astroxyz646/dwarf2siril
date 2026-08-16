@@ -141,6 +141,14 @@ compare any two stages. The previews are downscaled JPEGs saved in `previews/`
 next to your `.fit` — your real output is the full-resolution `.fit`, which the
 preview never touches.
 
+**If a layer you ticked is not in the list, the panel says why** rather than
+leaving it out in silence. Sometimes the reason is that nothing went wrong at
+all: stretch has no step of its own because it runs last and what it produced
+*is* the final image, and plate solving and colour calibration are skipped
+outright on frames the wide camera recorded no pointing for. A layer that went
+missing for no reason anyone can name still gets a line saying so, because
+that is worth more than an empty space.
+
 ### The command line
 
 Same engine, three verbs.
@@ -181,6 +189,7 @@ Quote anything containing a space — DWARF targets are named `C 27` and
 | `--denoise` | denoise the result |
 | `--star-reduction` | shrink stars (needs StarNet2) |
 | `--star-amount N` | how much of the star layer to keep, 0.0–1.0 (default 0.5) |
+| `--stretch` | stretch the result into a finished picture (runs last) |
 | `--starnet` | path to `starnet2.exe`, if it is somewhere unusual |
 | `--no-previews` | skip the before/after JPEGs |
 | `--framing` | `clean` or `whole` — see [Edges](#edges). Left off, each target picks its own |
@@ -282,12 +291,21 @@ alongside it, so nothing is ever lost.
 | **Photometric colour calibration** | Sets colour from the measured brightness of known stars instead of by eye. | Siril + internet |
 | **Denoise** | Siril's NL-Bayes denoiser. Helps most on short total integration. | Siril only |
 | **Reduce stars** | Puts the stars back smaller so the target stands out. | StarNet2 |
+| **Stretch it into a picture** | Opens the data out from linear into something you would actually show someone. | Siril only |
 
 **Order matters and is handled for you.** Background removal runs before colour
 calibration, because Siril itself warns that calibrating an image with a
 gradient gives an imprecise result. Plate solving runs before colour
 calibration, because colour calibration needs to know what it is looking at.
-Star reduction runs last, because it is the only destructive one.
+Star reduction runs after those, because it is the only destructive one.
+
+**Stretch runs last, after everything.** A stack straight out of Siril is
+*linear*: nearly all the signal is crammed into the bottom couple of percent of
+the range, which is why every other step looks like a flat grey rectangle with
+some stars in it. Every other layer expects that linear data — background
+removal, colour calibration and StarNet all measure it — so stretching earlier
+would hand all of them the wrong kind of input. The channels are stretched
+together, so the colour balance that colour calibration worked out survives.
 
 **Star reduction is a taste call, not an improvement.** It changes real data —
 the stars in the result are no longer what the sensor recorded. The slider sets

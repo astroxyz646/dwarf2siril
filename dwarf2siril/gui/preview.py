@@ -242,6 +242,16 @@ class PreviewPanel(QFrame):
         self.applied.setWordWrap(True)
         layout.addWidget(self.applied)
 
+        # Ticked, and not in the list below. Its own line rather than part of
+        # the finding, because it is about the RUN and is true whatever two
+        # stages happen to be selected, whereas the finding is about the pair
+        # currently being compared and changes with the dropdowns.
+        self.missing = QLabel("")
+        self.missing.setWordWrap(True)
+        self.missing.setTextFormat(Qt.TextFormat.RichText)
+        self.missing.hide()
+        layout.addWidget(self.missing)
+
         # Where a step that changes no pixels gets to say so, and where the
         # plate solve reports its actual result. A comparison that shows
         # nothing MUST say it shows nothing -- otherwise the honest
@@ -284,12 +294,23 @@ class PreviewPanel(QFrame):
         return label
 
     def load_from(
-        self, output_dir: Path, stack_name: str, applied: list[str]
+        self,
+        output_dir: Path,
+        stack_name: str,
+        post=None,
+        solvable: bool = True,
     ) -> bool:
         """Point the panel at a finished run. False if there is nothing to show.
 
         A missing preview is a missing preview, never a failed stack, so this
         returns quietly rather than raising.
+
+        Takes the PostOptions rather than a list of labels, so the "Applied:"
+        line and the list of stages come from ONE source. They used to be
+        computed separately -- the line from the ticked boxes, the stages
+        from the JPEGs on disk -- and nothing reconciled them, which is how a
+        ticked layer could be named as applied and silently absent from the
+        comparison at the same time.
         """
         preview_dir = output_dir / "previews"
         self.previews = []
@@ -304,10 +325,13 @@ class PreviewPanel(QFrame):
         processed = output_dir / f"{stack_name}_processed.fit"
         self.result_fit = processed if processed.is_file() else output_dir / f"{stack_name}.fit"
 
+        applied = post.enabled_labels() if post is not None else []
         if applied:
             self.applied.setText("Applied: " + ", ".join(applied) + ".")
         else:
             self.applied.setText("No optional layers were applied.")
+
+        self._explain_missing(post, solvable)
 
         self.file_note.setText(
             f"Full-resolution result: {self.result_fit.name}"
@@ -331,6 +355,46 @@ class PreviewPanel(QFrame):
         self.after_pick.setCurrentIndex(len(self.previews) - 1)
         self._refresh()
         return True
+
+    def _explain_missing(self, post, solvable: bool) -> None:
+        """Name every ticked layer that is not in the list, and say why.
+
+        THE DEFECT THIS FIXES: a layer the user ticked could be named in
+        "Applied:" and absent from the Compare dropdowns at the same time,
+        with nothing said about it. There is no reading of that which is not
+        alarming -- either the layer did nothing, or the app is hiding
+        something -- and both are worse than the truth, which is usually
+        mundane: the frames could not be solved, or the layer has no step of
+        its own by design.
+
+        Silence is the one answer that is never right here. A layer with no
+        known reason still gets a line saying that Siril wrote no preview for
+        it, because "we do not know why" is information and an empty panel is
+        not.
+        """
+        self.missing.hide()
+        if post is None:
+            return
+
+        have = {key for key, _caption, _path in self.previews}
+        notes: list[str] = []
+        for key, label, reason in post.expected_previews(solvable):
+            if key and key in have:
+                continue
+            if not reason:
+                reason = (
+                    "Siril wrote no preview for it, so there is nothing to "
+                    "compare -- the layer itself may still have run"
+                )
+            notes.append(f"<b>{label}</b> is not in the list: {reason}.")
+
+        if not notes:
+            return
+
+        self.missing.setText(
+            f'<span style="color:{theme.TEXT_MUTED};">' + "<br>".join(notes) + "</span>"
+        )
+        self.missing.show()
 
     @staticmethod
     def _describe_solve(path: Path | None) -> str:
