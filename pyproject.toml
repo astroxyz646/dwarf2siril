@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dwarf2siril"
+version = "0.1.0"
+description = "Prepare DWARF 3 EQ-mode exposures for stacking in Siril"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.optional-dependencies]
+# The GUI is the primary entry point but the CLI must work without it, so the
+# one third-party dependency stays optional at the packaging level.
+gui = ["PySide6>=6.5"]
+
+[project.scripts]
+dwarf2siril = "dwarf2siril.cli:main"
+
+[project.gui-scripts]
+dwarf2siril-gui = "dwarf2siril.gui.app:main"
+
+[tool.setuptools.packages.find]
+include = ["dwarf2siril*"]

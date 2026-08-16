@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+
+# Local test output. Astro stacks are gigabytes; they never belong in git.
+scratch-out/
+
+# PyInstaller output. The exe is a build artefact, not source.
+dist/
+build/
+*.manifest
