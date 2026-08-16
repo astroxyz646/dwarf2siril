@@ -193,6 +193,23 @@ def build(
     for folder in folders:
         (output_dir / folder).mkdir(parents=True, exist_ok=True)
 
+    # Previews from a PREVIOUS run into this same folder must go, because a
+    # run only writes the stages it actually performs. Rebuild the same target
+    # with fewer layers and the old stage JPEGs survive, and the panel -- which
+    # finds previews by looking for their filenames -- shows them alongside the
+    # new ones as though they came from this stack. That is how "compare the
+    # plain stack with the final image" came to show no difference while the
+    # per-layer comparisons looked convincing: the per-layer images were real,
+    # but they were a different, older stack. Deleting only the JPEGs we are
+    # about to write keeps this to the previews and nothing else in the folder.
+    preview_dir = output_dir / PREVIEW_DIR
+    if preview_dir.is_dir():
+        for stale in preview_dir.glob("*.jpg"):
+            try:
+                stale.unlink()
+            except OSError:
+                pass   # a leftover thumbnail is not worth failing the build
+
     lights_dir = output_dir / LIGHTS_DIR
     darks_dir = output_dir / DARKS_DIR
 

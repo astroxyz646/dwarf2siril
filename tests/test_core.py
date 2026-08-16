@@ -740,6 +740,32 @@ class BuilderTests(unittest.TestCase):
         finally:
             os.chdir(cwd)
 
+    def test_previews_from_an_earlier_run_are_cleared(self) -> None:
+        """A rebuild must not leave the last run's stage previews behind.
+
+        Found in the wild: a target was built with every layer on, then rebuilt
+        with none. The second run wrote only the plain and final previews, so
+        the first run's per-layer JPEGs survived and the before/after panel
+        showed them as though they belonged to the new stack -- convincing
+        per-layer differences sitting next to a plain-vs-final pair that were
+        correctly identical.
+        """
+        from dwarf2siril.postprocess import PostOptions
+
+        out = self.base / "rebuilt"
+        build(self.group, out, post=PostOptions(previews=True), progress=None)
+
+        previews = out / "previews"
+        stale = previews / "01_background.jpg"
+        stale.write_bytes(b"not really a jpeg")
+        keep = previews / "notes.txt"
+        keep.write_text("not a preview", encoding="utf-8")
+
+        build(self.group, out, post=PostOptions(previews=True), progress=None)
+
+        self.assertFalse(stale.exists(), "a previous run's preview survived")
+        self.assertTrue(keep.is_file(), "non-preview files must be left alone")
+
     def test_refuses_to_build_an_incompatible_group(self) -> None:
         make_session(self.root, "DWARF_RAW_TELE_C 27_EXP_30_GAIN_100_C", "C 27", 30, 100, 2)
         result = scan(self.root)

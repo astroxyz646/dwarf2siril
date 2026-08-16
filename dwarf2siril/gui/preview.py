@@ -76,10 +76,13 @@ def _mean_difference(before: QPixmap, after: QPixmap) -> float | None:
     total = 0
     count = 0
     for y in range(left.height()):
-        # constScanLine hands back a memoryview of the row's bytes.
+        # constScanLine hands back a memoryview of the row's bytes. RGB888 is
+        # three bytes per pixel and all three are compared: stepping over two
+        # of them measured the red channel alone, which misses a change that
+        # lands mostly in blue -- colour calibration, of all things.
         a = left.constScanLine(y)
         b = right.constScanLine(y)
-        for index in range(0, min(len(a), len(b)), 3):   # one byte per pixel
+        for index in range(min(len(a), len(b))):
             total += abs(a[index] - b[index])
             count += 1
     return total / count if count else None

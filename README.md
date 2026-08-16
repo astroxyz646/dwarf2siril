@@ -8,7 +8,7 @@ Several nights of the same target, combined into one stack — automatically.
 
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue?logo=python&logoColor=white)](https://www.python.org/)
 [![Platform](https://img.shields.io/badge/platform-Windows-0078D6?logo=windows&logoColor=white)](#-installation)
-[![Tests](https://img.shields.io/badge/tests-138%20passing-brightgreen)](#tests)
+[![Tests](https://img.shields.io/badge/tests-139%20passing-brightgreen)](#tests)
 [![Siril](https://img.shields.io/badge/Siril-1.4%2B-orange)](https://siril.org/)
 [![Dependencies](https://img.shields.io/badge/dependencies-1-lightgrey)](#from-source)
 
@@ -455,7 +455,7 @@ the one place it must not go.
 python -m unittest discover -s tests
 ```
 
-138 tests, built against a synthetic card that mirrors the real DWARF layout —
+139 tests, built against a synthetic card that mirrors the real DWARF layout —
 spaces in target names, the DWARF's own stack sitting beside the subs, dark
 folders with no `shotsInfo.json`.
 
