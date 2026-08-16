@@ -297,5 +297,69 @@ class LayoutTest(unittest.TestCase):
         finally:
             host.close()
 
+    def test_a_wrapped_label_is_pinned_even_when_it_looks_right(self) -> None:
+        """The understatement that survives looking correct.
+
+        _give_room used to skip any label whose height already matched what
+        it needed, on the reasonable-sounding grounds that there was nothing
+        to change. There was: the HEIGHT was right and the MINIMUM was still
+        one line, so the label went on claiming it could live in a fifth of
+        the room it was using. The card holding it inherited that claim, was
+        given 19px less than its contents need, and drew the section below
+        on top of the one above.
+
+        Nothing looked wrong until a sixth extra was added to the layers
+        card and the slack ran out -- which is why this is asserted on the
+        minimum rather than on the appearance.
+        """
+        from PySide6.QtWidgets import QLabel, QWidget
+
+        from dwarf2siril.gui.app import _give_room
+
+        # Placed by hand rather than by a layout, so the label can be put at
+        # exactly its wrapped height BEFORE _give_room ever sees it. That is
+        # the case that used to slip through, and a layout would keep
+        # re-sizing the label underneath the test and hide it.
+        host = QWidget()
+        host.resize(280, 400)
+        label = QLabel(
+            "A sentence long enough to wrap onto several lines in a column "
+            "this narrow, which is what every explanatory note in the "
+            "sidebar is, and what makes them understate their height.",
+            host,
+        )
+        label.setWordWrap(True)
+        host.show()
+        for _ in range(8):
+            self.app.processEvents()
+
+        try:
+            wrapped = label.heightForWidth(280)
+            label.setGeometry(0, 0, 280, wrapped)
+            for _ in range(8):
+                self.app.processEvents()
+
+            # The precondition the bug needed: drawn at the right height,
+            # and still free to be squashed to one line.
+            self.assertEqual(label.height(), wrapped)
+            self.assertLess(
+                label.minimumHeight(),
+                wrapped,
+                "the label was already pinned, so this is not the case that broke",
+            )
+
+            _give_room(host)
+
+            self.assertEqual(
+                label.minimumHeight(),
+                wrapped,
+                "the label still reports a one-line minimum while drawing "
+                f"{wrapped}px, so every panel above it will under-budget",
+            )
+            self.assertEqual(label.maximumHeight(), wrapped)
+        finally:
+            host.close()
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -374,7 +374,23 @@ def _give_room(root) -> bool:
         if width <= 0:
             continue
         needed = label.heightForWidth(width)
-        if needed > 0 and label.height() != needed:
+        # THE TEST IS "IS IT PINNED", NOT "IS IT THE RIGHT HEIGHT".
+        #
+        # Those are not the same question and the difference was a live
+        # defect. A label that the layout has ALREADY drawn at its correct
+        # height passed the old `height() != needed` test and was skipped --
+        # so it was never pinned, and it went on reporting a minimum of one
+        # line while occupying four. Its card inherited the understatement,
+        # ended up with a minimumSizeHint 19px short of what its own
+        # contents need, and the column below the card was drawn on top of
+        # it: the EDGES section over "Drop bad frames" and its dropdown.
+        #
+        # Measured on the operator's card at 1636x1171 and 1280x880 inside
+        # the packaged exe. It appeared when a sixth extra was added to the
+        # layers card, which is exactly the sort of unrelated change that
+        # should not be able to break a layout.
+        pinned = label.minimumHeight() == needed == label.maximumHeight()
+        if needed > 0 and not pinned:
             # FIXED, not minimum. A minimum still leaves sizeHint reporting
             # one line, and a box layout hands out space by sizeHint -- so
             # the panel above still budgets one line for it and gives the
