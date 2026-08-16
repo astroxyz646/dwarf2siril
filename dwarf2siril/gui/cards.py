@@ -96,12 +96,24 @@ class DriveTile(QPushButton):
         self.setCheckable(True)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setText("")
-        self.setMinimumSize(250, 66)
+        # 84 rather than 66: the three lines need about 48px between them,
+        # and the insets below add another 28. 66 was sized for the old
+        # 2px inset and would now squash the tile's own contents.
+        self.setMinimumSize(250, 84)
         self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(4, 2, 4, 2)
-        layout.setSpacing(1)
+        # THE PADDING LIVES HERE, not in the stylesheet. This is a
+        # QPushButton with a layout inside it, and a style sheet's `padding`
+        # only insets what the BUTTON itself draws -- its own text and icon,
+        # which are empty here. Child widgets are placed by the layout, and
+        # the layout only knows about these margins. The stylesheet said
+        # `padding: 16px 18px` and looked right on the page while the tile on
+        # screen had 4px at the sides and 2px top and bottom, which is why
+        # the title sat against the top edge and the amber line against the
+        # bottom one.
+        layout.setContentsMargins(18, 14, 18, 14)
+        layout.setSpacing(2)
 
         title = _label(label)
         title.setStyleSheet("font-size: 11pt; font-weight: 600;")

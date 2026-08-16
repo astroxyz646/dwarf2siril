@@ -248,5 +248,54 @@ class LayoutTest(unittest.TestCase):
         finally:
             window.close()
 
+    def test_the_drive_tile_has_room_inside_its_border(self) -> None:
+        """Padding INSIDE a bordered box, which nothing else here measures.
+
+        The clipping check asks whether a widget fits. This tile always did:
+        its three lines fitted its 66px perfectly, with two pixels above the
+        title and two below the amber line, and touching the border is not
+        clipping. It looked cramped and no check could say so.
+
+        Not reachable through MainWindow, because the drive scan is off in
+        these tests and a tile only exists once a card is found -- so the
+        tile is built directly, the way the app builds it.
+        """
+        from PySide6.QtWidgets import QHBoxLayout, QWidget
+
+        from dwarf2siril.gui.cards import DriveTile
+
+        host = QWidget()
+        row = QHBoxLayout(host)
+        row.setContentsMargins(0, 0, 0, 0)
+        tile = DriveTile("U盘 (D:\\)", "D:\\Astronomy", "DWARF 3 data found here")
+        row.addWidget(tile)
+        row.addStretch(1)
+        host.resize(700, 200)
+        host.show()
+        for _ in range(8):
+            self.app.processEvents()
+
+        try:
+            children = [c for c in tile.findChildren(QWidget) if c.isVisible()]
+            self.assertTrue(children, "the tile drew nothing at all")
+
+            box = tile.rect()
+            insets = {
+                "left": min(c.geometry().left() for c in children),
+                "top": min(c.geometry().top() for c in children),
+                "right": box.right() - max(c.geometry().right() for c in children),
+                "bottom": box.bottom() - max(c.geometry().bottom() for c in children),
+            }
+            for edge, gap in insets.items():
+                with self.subTest(edge=edge):
+                    self.assertGreaterEqual(
+                        gap,
+                        10,
+                        f"only {gap}px between the tile's contents and its "
+                        f"{edge} border: {insets}",
+                    )
+        finally:
+            host.close()
+
 if __name__ == "__main__":
     unittest.main()

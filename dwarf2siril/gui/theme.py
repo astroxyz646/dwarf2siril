@@ -180,7 +180,11 @@ def stylesheet() -> str:
         background: {SURFACE};
         border: 1px solid {BORDER};
         border-radius: 12px;
-        padding: 16px 18px;
+        /* No padding here on purpose. The tile's contents are child widgets
+           laid out by a QVBoxLayout, and a style sheet's padding does not
+           inset those -- it only insets the button's own text, which is
+           empty. The real insets are the layout's contents margins in
+           cards.py; a value here would just be a comforting lie. */
         text-align: left;
         font-size: 11pt;
         color: {TEXT};

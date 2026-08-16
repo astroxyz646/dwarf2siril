@@ -124,7 +124,11 @@ class DeleteDialog(QDialog):
             listing.setMaximumHeight(150)
             listing.setStyleSheet(
                 f"background: {theme.SURFACE}; border: 1px solid {theme.BORDER}; "
-                f"border-radius: 6px; font-family: {theme.MONO_STACK}; "
+                # Matches the run panel's log, which is the same thing: a
+                # bordered box of monospace lines. Without it the first
+                # filename in the list of what is about to be deleted sits
+                # hard against the border.
+                f"border-radius: 6px; padding: 9px; font-family: {theme.MONO_STACK}; "
                 f"font-size: 8.5pt; color: {theme.TEXT_MUTED};"
             )
             layout.addWidget(listing)

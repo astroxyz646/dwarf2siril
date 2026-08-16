@@ -78,7 +78,9 @@ class CleanupPanel(QWidget):
         self.tree.setStyleSheet(
             f"QTreeWidget {{ background: {theme.SURFACE}; "
             f"border: 1px solid {theme.BORDER}; border-radius: 8px; }}"
-            f"QTreeWidget::item {{ padding: 5px 2px; }}"
+            # 8px at the sides, not 2. The first column's tick and the last
+            # column's sentence both ran up against the tree's own border.
+            f"QTreeWidget::item {{ padding: 5px 8px; }}"
             f"QHeaderView::section {{ background: {theme.SURFACE_RAISED}; "
             f"color: {theme.TEXT_FAINT}; border: none; padding: 6px; }}"
         )
