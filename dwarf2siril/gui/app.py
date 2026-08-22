@@ -21,6 +21,26 @@ plugging in a different card.
 It folds to a rail when the window is too narrow to hold it AND two cards.
 Deciding which one folds matters: the alternative is a single column of
 cards, which is exactly the chunky layout the grid replaced.
+
+WHY STEP 2 IS BUILT AT STARTUP. Its heading and its state panel are made
+once and live for the life of the window; only the grid of cards is rebuilt
+by a scan. Step 2 used to be built by the scan handler, which meant that
+until a card had been read the whole left column below step 1 was an
+unbroken black rectangle -- no step 2, no sign there was going to be one,
+nothing to read while a scan ran, and one grey sentence when a card turned
+out to hold nothing. A blank half-screen is not a neutral state: it reads as
+a broken window, and it is exactly where somebody opening this for the first
+time is standing. _StatePanel holds that space in every state the grid can
+be in that is not "here are your targets", and each of those states says
+what is going on and what to do about it.
+
+WHAT THE FOOTER IS FOR. The status bar and its progress bar are the only
+strip outside every scroll area, in every mode, at every window size. So
+anything that must not be missable is put there as well as in its own panel:
+Stop while Siril runs, the stage and percentage of a running stack, and
+whether it worked. The run panel says all of it more fully, but the run
+panel is inside the scrolling sidebar, and on a small window it is below the
+fold at exactly the moment it matters.
 """
 
 from __future__ import annotations
