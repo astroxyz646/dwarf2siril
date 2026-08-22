@@ -312,11 +312,34 @@ def _relayout(root) -> None:
 
 
 def _tallest(content) -> int:
-    """The height this column's children actually demand, measured not asked.
+    """The height this column's children actually demand, laid end to end.
 
-    Every visible child's own requirement, laid end to end with the spacing
-    and margins the layout uses. No cached hint anywhere in it, which is the
-    whole point: the hints were what went stale.
+    Every visible child's own requirement, with the spacing and margins the
+    layout uses. Three measures are taken because any one alone understates:
+    sizeHint is a cached opinion, minimumHeight is whatever _give_room
+    pinned, and minimumSizeHint is what the child recomputes from its own
+    contents. The largest of the three is what the column must hold.
+
+    *** WHAT MUST NEVER BE IN HERE IS widget.height(). ***
+
+    It was, and it made this function a RATCHET: the column could be told to
+    grow and never to shrink back. Switching to Frames or Clean up left the
+    sidebar at the height Stack mode had needed -- 1078px of column holding
+    270px of content -- and a box layout hands the slack to whatever will
+    take it, so a heading, its hint and its card were each drawn 515px tall
+    with enormous holes between them. Two of the three modes looked like a
+    rendering fault.
+
+    It is a ratchet because it is self-confirming: once the layout has
+    stretched a child to fill an over-tall column, that child's height IS
+    the over-tall column, so the next pass measures the mistake and agrees
+    with it. Nothing could ever climb back down.
+
+    The reason height() was reached for -- that sizeHint goes stale, and a
+    card gets drawn on top of the heading below it -- is real, and it is
+    what minimumSizeHint does above instead: a child recomputes that from
+    its own contents rather than serving a cached number, so the guard
+    survives without the ratchet.
     """
     layout = content.layout()
     if layout is None:
@@ -333,9 +356,9 @@ def _tallest(content) -> int:
         if not widget.isVisible():
             continue
         total += max(
-            widget.height(),
             widget.sizeHint().height(),
             widget.minimumHeight(),
+            widget.minimumSizeHint().height(),
         )
         seen += 1
     return total + max(0, seen - 1) * layout.spacing()
@@ -866,6 +889,16 @@ class MainWindow(QWidget):
 
         for card in self.group_cards:
             card.set_mode(mode)
+
+        # Refit the sidebar NOW, in the same turn as the switch, rather than
+        # leaving it to the layout notification that follows. A mode swaps
+        # one set of panels for another of a completely different height, so
+        # the frame between the swap and the refit is the frame where the
+        # old height is holding the new contents -- either stretched apart
+        # or, going the other way, drawn on top of each other. Nobody should
+        # have to see that flash to get a correct sidebar a moment later.
+        if getattr(self, "sidebar_scroll", None) is not None:
+            self.sidebar_scroll.fit()
 
     def _show_cleanup(self) -> None:
         """Build the cleanup view on demand, and keep it up to date."""
