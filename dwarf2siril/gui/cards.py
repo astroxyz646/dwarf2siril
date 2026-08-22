@@ -273,7 +273,43 @@ class GroupCard(QFrame):
         detail_layout.setContentsMargins(0, 4, 0, 0)
         detail_layout.setSpacing(4)
         detail_layout.addWidget(divider())
-        detail_layout.addWidget(_label("SESSIONS", "Faint"))
+
+        # SESSIONS, and how many of them are in. Ticking sessions one at a
+        # time is fine for two; it is not fine for the eight or ten a week
+        # of clear nights leaves on a card, and there was no way at all to
+        # get back to "all of them" once you had started unticking. The
+        # count is here rather than only on the card face because this is
+        # where the ticking happens and this is where you need to see it.
+        sessions_head = QHBoxLayout()
+        sessions_head.setSpacing(theme.SPACE_2)
+        self.sessions_heading = _label("SESSIONS", "Faint")
+        sessions_head.addWidget(self.sessions_heading)
+        sessions_head.addStretch(1)
+
+        # Only offered where there is more than one, since with one session
+        # the tick box cannot be turned off anyway.
+        self.select_all_button = QPushButton("All")
+        self.select_all_button.setObjectName("Link")
+        self.select_all_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.select_all_button.setToolTip("Put every session back in the stack")
+        self.select_all_button.clicked.connect(lambda: self._select_sessions(True))
+        sessions_head.addWidget(self.select_all_button)
+
+        self.select_none_button = QPushButton("None but the first")
+        self.select_none_button.setObjectName("Link")
+        self.select_none_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.select_none_button.setToolTip(
+            "Leave only the first session in. A group has to keep one — "
+            "there is no stack without frames."
+        )
+        self.select_none_button.clicked.connect(lambda: self._select_sessions(False))
+        sessions_head.addWidget(self.select_none_button)
+
+        multiple = len(group.sessions) > 1
+        self.select_all_button.setVisible(multiple)
+        self.select_none_button.setVisible(multiple)
+        detail_layout.addLayout(sessions_head)
+
         for session in group.sessions:
             row = SessionRow(session)
             row.toggled.connect(self._on_toggle)
@@ -445,6 +481,24 @@ class GroupCard(QFrame):
             self.parentWidget().layout().invalidate()
             self.parentWidget().adjustSize()
 
+    def _select_sessions(self, everything: bool) -> None:
+        """Tick or untick the lot in one go, without a storm of regroups.
+
+        Every tick box emits, and every emission re-runs the compatibility
+        checks over the whole group. Doing that eight times to arrive at the
+        state the user asked for once is both slow and visibly flickery, so
+        the rows are set quietly and the group is rechecked once at the end.
+        """
+        for index, row in enumerate(self.rows):
+            row.checkbox.blockSignals(True)
+            # Never all-off: a group with no sessions is not a stack, it is
+            # an error message. "None" therefore means "the first one only",
+            # which is what the tick boxes already enforce one at a time.
+            row.checkbox.setChecked(everything or index == 0)
+            row.checkbox.blockSignals(False)
+        self.changed.emit()
+        self.refresh()
+
     def _on_toggle(self) -> None:
         if not self.selected_sessions and self.rows:
             self.rows[0].checkbox.setChecked(True)
@@ -477,8 +531,41 @@ class GroupCard(QFrame):
         self.grid_button.style().polish(self.grid_button)
 
     def set_busy(self, busy: bool) -> None:
-        self.build_button.setEnabled(not busy and self.group.is_buildable)
+        self._busy = busy
         self.build_button.setText("Working..." if busy else "Prepare")
+        self._refresh_build_button()
+
+    def _refresh_build_button(self) -> None:
+        """Enabled, or DISABLED WITH THE REASON ON IT.
+
+        A greyed-out button that will not say why is a dead end: the user
+        has no way to tell a bug from a decision, so they press it again and
+        then stop trusting the screen. Every state that greys this button
+        now names itself in the tooltip, in the same words the card is
+        already using on its face.
+        """
+        busy = getattr(self, "_busy", False)
+        buildable = self.group.is_buildable
+        self.build_button.setEnabled(not busy and buildable)
+
+        if busy:
+            self.build_button.setToolTip(
+                "A build is already running. Wait for it to finish, or stop "
+                "it from the bar at the bottom of the window."
+            )
+        elif not buildable:
+            reasons = "\n".join(f"• {issue.message}" for issue in self.group.errors)
+            self.build_button.setToolTip(
+                "These sessions cannot go in one stack:\n" + reasons
+                if reasons
+                else "There is nothing in this group to stack."
+            )
+        else:
+            self.build_button.setToolTip(
+                f"Copy {self.group.total_frames} frames into a Siril project "
+                f"for {self.group.display_target}, and write the script that "
+                f"stacks them."
+            )
 
     def refresh(self) -> None:
         group = self.group
@@ -546,6 +633,16 @@ class GroupCard(QFrame):
 
         sessions = len(self.selected_sessions) or len(group.sessions)
         session_text = f"{sessions} sessions" if sessions > 1 else "1 session"
+
+        # Inside Details, say how many of how many are in. "2 sessions" on
+        # the face is a fact about the stack; "2 OF 3 IN" is the fact you
+        # need while you are the one doing the ticking.
+        available = len(self.rows) or len(group.sessions)
+        self.sessions_heading.setText(
+            f"SESSIONS  ·  {sessions} OF {available} IN"
+            if available > 1
+            else "SESSIONS"
+        )
         self.status_line.setText(
             f'<span style="color:{colour};font-weight:600;">{mark} {calibration}</span>'
             f'<span style="color:{theme.TEXT_FAINT};">   ·   {session_text}</span>'
@@ -602,7 +699,7 @@ class GroupCard(QFrame):
         for issue in group.warnings:
             self.issues_box.addWidget(_issue_label(issue.message, theme.WARN, "Note"))
 
-        self.build_button.setEnabled(group.is_buildable)
+        self._refresh_build_button()
 
 
 def _shorten(text: str, limit: int = 74) -> str:

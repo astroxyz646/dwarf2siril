@@ -1626,6 +1626,13 @@ class MainWindow(QWidget):
         row.addWidget(choose)
         layout.addLayout(row)
 
+        # SAY THAT IT IS NEEDED, before the user finds out by pressing
+        # Prepare and having a file dialog appear at them. An empty box with
+        # a grey placeholder reads as optional; it is not, and the moment to
+        # say so is while they are looking at it, not after.
+        self.output_note = _label("", "Faint", wrap=True)
+        layout.addWidget(self.output_note)
+
         # There was a "Link instead of copying" tick box here. It asked the
         # user to choose between two mechanisms that produce identical output,
         # and its label recommended putting the project on the card -- the one
@@ -1651,7 +1658,25 @@ class MainWindow(QWidget):
             wrap=True,
         )
         layout.addWidget(note)
+        self._refresh_output_note()
         return card
+
+    def _refresh_output_note(self) -> None:
+        """One line under the output box, saying where it stands."""
+        self.output_note.setTextFormat(Qt.TextFormat.RichText)
+        if self.output_dir is None:
+            self.output_note.setText(
+                f'<span style="color:{theme.WARN};">Needed before you can '
+                f'build.</span> Pick anywhere with room — each target gets '
+                f'its own subfolder inside it.'
+            )
+            self.output_field.setToolTip("")
+        else:
+            self.output_note.setText(
+                "Each target gets its own subfolder here, so one folder can "
+                "hold several projects."
+            )
+            self.output_field.setToolTip(str(self.output_dir))
 
     def _recheck_all(self) -> None:
         for card in self.group_cards:
@@ -1663,6 +1688,7 @@ class MainWindow(QWidget):
             return
         self.output_dir = Path(chosen)
         self.output_field.setText(chosen)
+        self._refresh_output_note()
 
     # -- step 4: build ---------------------------------------------------
 
