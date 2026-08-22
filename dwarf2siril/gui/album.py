@@ -39,8 +39,9 @@ class AlbumWindow(QDialog):
         self._pixmap: QPixmap | None = None
 
         self.setWindowTitle(f"{target} — your DWARF's own picture")
-        # Styled in theme.py rather than here: an inline sheet is set once at
-        # construction and a palette switch cannot reach it.
+        # Named, not styled inline. See QDialog#Sheet in theme.py for why a
+        # bare `background:` on a dialog is the wrong tool -- it cascades
+        # onto the children and takes the fill off the Danger button.
         self.setObjectName("Sheet")
         self.setSizeGripEnabled(True)
 

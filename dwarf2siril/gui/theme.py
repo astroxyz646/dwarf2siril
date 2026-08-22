@@ -119,6 +119,27 @@ class Palette:
     # the single most likely way to ship an unreadable primary button.
     ACCENT_FG: str
 
+    # The keyboard focus ring. A SEPARATE token from the accent because it is
+    # doing a different job: the accent marks what is SELECTED, focus marks
+    # where the KEYBOARD is, and the two are on screen at the same time. It
+    # used to be ACCENT_DIM, which on a near-black surface is a 1px line at
+    # about the same lightness as the border it replaces -- tabbing through
+    # the window moved something you could not see.
+    #
+    # The rule it has to meet is WCAG's 3:1 for a non-text indicator against
+    # every surface it can land on, plus enough distance from the accent that
+    # a focused control and a selected one are not the same thing. HOW it
+    # meets that flips with the palette: on the dark four it is LIGHTER than
+    # the accent, and on Daylight it is DARKER, because "brighter" on a white
+    # ground is the direction that disappears. That is exactly why this is a
+    # field and not the one constant it arrived as.
+    #
+    # It stays ONE PIXEL on every palette. Every control here keeps a 1px
+    # border at all times so that gaining focus recolours it rather than
+    # resizing the control and shoving its neighbours along the row; a 2px
+    # ring would undo that.
+    FOCUS: str
+
     # ---- status ---------------------------------------------------------
     # Each of these has to survive being seen next to the accent, so all
     # four sit well away from it. RUNNING is the odd one out and the reason
@@ -179,6 +200,8 @@ DEEP_SPACE = Palette(
     ACCENT_PRESSED="#3B79BE",
     ACCENT_DIM="#2E567F",
     ACCENT_FG="#04101C",
+    # 7.4:1 at worst against the surfaces, 1.8:1 from the accent.
+    FOCUS="#8FC2F5",
     OK="#4FC98C",
     WARN="#E3A93F",
     ERROR="#E5675E",
@@ -245,6 +268,12 @@ RED_NIGHT = Palette(
     ACCENT_PRESSED="#B85C48",
     ACCENT_DIM="#5E2A1E",
     ACCENT_FG="#170403",
+    # Warm, like everything else here -- the standard ring is a light blue
+    # and a light blue is the one thing this palette exists to avoid. A pale
+    # orange instead: 8.6:1 at worst against the surfaces, 2.0:1 from the
+    # accent, and further round towards orange than RUNNING's peach so the
+    # ring and a working stack do not read as the same event.
+    FOCUS="#FF9E7A",
     OK="#C99A8E",
     WARN="#E89330",
     ERROR="#F2372A",
@@ -284,6 +313,8 @@ NEBULA = Palette(
     ACCENT_PRESSED="#A455C2",
     ACCENT_DIM="#5B3070",
     ACCENT_FG="#150520",
+    # 7.5:1 at worst against the surfaces, 1.8:1 from the accent.
+    FOCUS="#D9A6F0",
     OK="#4FC98C",
     WARN="#E3A93F",
     ERROR="#EE5F4A",
@@ -323,6 +354,8 @@ MARS = Palette(
     ACCENT_PRESSED="#AE7830",
     ACCENT_DIM="#5E4326",
     ACCENT_FG="#190D04",
+    # 8.9:1 at worst against the surfaces, 1.9:1 from the accent.
+    FOCUS="#F2C98A",
     OK="#7ABE52",
     WARN="#F7E88C",
     ERROR="#E5675E",
@@ -384,6 +417,10 @@ DAYLIGHT = Palette(
     ACCENT_PRESSED="#123E73",
     ACCENT_DIM="#AFC9E8",
     ACCENT_FG="#FFFFFF",
+    # The one that inverts. A light ring on a white card is invisible, so
+    # this is a deep navy: 10.7:1 at worst against the surfaces and 2.0:1
+    # from the accent, which is a WIDER gap than the dark palettes manage.
+    FOCUS="#003366",
     OK="#1A7345",
     WARN="#8A5D08",
     ERROR="#BC2E25",
@@ -589,8 +626,23 @@ def stylesheet() -> str:
     }}
 
     /* Every dialog in the app sits on the window ground rather than the
-       platform's. This used to be an inline sheet on each one, which is
-       precisely the kind of thing a palette switch cannot reach. */
+       platform's. HERE, and by object name, for two separate reasons.
+
+       It cannot be an inline sheet on each dialog, because one set at
+       construction still holds the palette the app started in.
+
+       And it must not be a bare `background:` anywhere, because a stylesheet
+       set ON a widget applies to that widget AND every descendant, and
+       outranks the application sheet for them. A bare rule therefore
+       repainted every button, box and label in the dialog too -- which meant
+       the filled Danger button lost its red and drew its near-black label
+       onto the near-black ground. The most dangerous button in the app was
+       invisible in exactly the two windows that own it, while the identical
+       button in the main window looked right, because the main window never
+       set a sheet of its own.
+
+       A rule in the application sheet matches the dialog and nothing else,
+       so the ground is set and the children go on being styled from here. */
     QDialog#Sheet {{ background: {BG}; }}
 
     /* ---- typography ------------------------------------------------ */
@@ -719,7 +771,7 @@ def stylesheet() -> str:
         background: {SURFACE_RAISED};
         color: {TEXT};
     }}
-    QPushButton#Mode:focus {{ border: 1px solid {ACCENT_DIM}; }}
+    QPushButton#Mode:focus {{ border: 1px solid {FOCUS}; }}
     /* The dangerous mode is the only one that colours itself, and only once
        you are actually in it. */
     QPushButton#ModeDanger:checked {{
@@ -781,7 +833,7 @@ def stylesheet() -> str:
         background: {tint(TEXT, WASH_HARD)};
     }}
     QPushButton#SidebarToggle:pressed {{ background: {tint(TEXT, WASH_HARD + 0x0D)}; }}
-    QPushButton#SidebarToggle:focus {{ border: 1px solid {ACCENT_DIM}; }}
+    QPushButton#SidebarToggle:focus {{ border: 1px solid {FOCUS}; }}
 
     /* ---- surfaces the header and footer sit on ---------------------- */
     QWidget#Chrome {{ background: {SURFACE}; }}
@@ -811,7 +863,7 @@ def stylesheet() -> str:
         background: {SURFACE_RAISED};
         border: 1px solid {ACCENT};
     }}
-    QPushButton#DriveTile:focus {{ border: 1px solid {ACCENT_DIM}; }}
+    QPushButton#DriveTile:focus {{ border: 1px solid {FOCUS}; }}
 
     /* ---- buttons --------------------------------------------------- */
     /* Every button keeps a 1px border at all times, transparent when it is
@@ -826,7 +878,7 @@ def stylesheet() -> str:
     }}
     QPushButton:hover {{ background: {SURFACE_HOVER}; border-color: {BORDER_STRONG}; }}
     QPushButton:pressed {{ background: {SURFACE_PRESSED}; }}
-    QPushButton:focus {{ border: 1px solid {ACCENT_DIM}; }}
+    QPushButton:focus {{ border: 1px solid {FOCUS}; }}
     QPushButton:disabled {{
         color: {TEXT_FAINT};
         background: {SURFACE};
@@ -899,7 +951,7 @@ def stylesheet() -> str:
         border-color: {BORDER_STRONG};
     }}
     QPushButton#Ghost:pressed {{ background: {SURFACE_PRESSED}; }}
-    QPushButton#Ghost:focus {{ border-color: {ACCENT_DIM}; }}
+    QPushButton#Ghost:focus {{ border-color: {FOCUS}; }}
 
     QPushButton#Link {{
         background: transparent;
@@ -912,7 +964,7 @@ def stylesheet() -> str:
     }}
     QPushButton#Link:hover {{ color: {ACCENT}; }}
     QPushButton#Link:pressed {{ color: {ACCENT_PRESSED}; }}
-    QPushButton#Link:focus {{ border-color: {ACCENT_DIM}; }}
+    QPushButton#Link:focus {{ border-color: {FOCUS}; }}
 
     /* ---- inputs ---------------------------------------------------- */
     QLineEdit {{
@@ -967,6 +1019,13 @@ def stylesheet() -> str:
     }}
     QCheckBox::indicator:disabled {{ border-color: {BORDER}; background: {SURFACE}; }}
     QCheckBox:disabled {{ color: {TEXT_FAINT}; }}
+    /* Keyboard focus on a tick box has to be visible on the BOX, not on the
+       word beside it -- the box is the control. Written AFTER the checked
+       rules on purpose: Qt resolves equal specificity by source order, so a
+       focus border placed above ::indicator:checked is simply overwritten
+       by it, and tabbing onto a ticked box shows nothing at all. */
+    QCheckBox::indicator:focus {{ border: 1px solid {FOCUS}; }}
+    QCheckBox::indicator:checked:focus {{ border: 1px solid {FOCUS}; }}
 
     /* ---- radio buttons and sliders ---------------------------------- */
     /* Both were left to the platform style before, which on Windows draws
@@ -992,6 +1051,8 @@ def stylesheet() -> str:
             stop: 0.55 {BG}, stop: 1 {BG}
         );
     }}
+    QRadioButton::indicator:focus {{ border: 1px solid {FOCUS}; }}
+    QRadioButton::indicator:checked:focus {{ border: 1px solid {FOCUS}; }}
     QRadioButton:disabled {{ color: {TEXT_FAINT}; }}
 
     QSlider::groove:horizontal {{
@@ -1164,6 +1225,26 @@ def stylesheet() -> str:
         border-radius: {RADIUS_SM}px;
         padding: 6px 10px;
     }}
+
+    /* ---- message boxes ---------------------------------------------- */
+    /* Every warning and every question in this app is a QMessageBox, and
+       none of them were styled -- so its headline, which Qt puts in a label
+       of its own, was drawn at exactly the same size and weight as the
+       paragraph under it. A box whose first line is meant to be read first
+       has to look like it. Named sub-widgets rather than a blanket QLabel
+       rule, so the informative text keeps the body size. */
+    QMessageBox {{ background: {BG}; }}
+    QMessageBox QLabel#qt_msgbox_label {{
+        font-size: 11.5pt;
+        font-weight: 620;
+        color: {TEXT};
+    }}
+    QMessageBox QLabel#qt_msgbox_informativelabel {{
+        color: {TEXT_MUTED};
+    }}
+    /* Wide enough not to read as a pair of afterthoughts under a paragraph
+       that long. */
+    QMessageBox QPushButton {{ min-width: 96px; }}
     """
 
 

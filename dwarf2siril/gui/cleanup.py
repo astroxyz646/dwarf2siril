@@ -78,17 +78,28 @@ class CleanupPanel(QWidget):
 
         self.tree = QTreeWidget()
         self.tree.setColumnCount(4)
-        self.tree.setHeaderLabels(["", "Size", "Advice", "What it is"])
+        # The first column is the one with the tick boxes in it, and it was
+        # the only column with no name at all.
+        self.tree.setHeaderLabels(["What goes", "Size", "Advice", "What it is"])
         self.tree.setRootIsDecorated(False)
         self.tree.setAlternatingRowColors(False)
         self.tree.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
         # Surface, border, row padding and header are all in theme.py: this
         # is the only tree in the app, but its colours are not its own.
-        # Tall enough to show a whole card's worth of folders without
-        # scrolling. As a mode rather than a dialog this panel shares a
-        # scrolling column, so it has to ask for its height rather than
-        # being handed whatever is left over.
-        self.tree.setMinimumHeight(430)
+        #
+        # THE TREE TAKES WHAT IS LEFT, and never demands more. It asked for
+        # 430px so a whole card's folders fit without scrolling, which is
+        # right on a big window and impossible on a 900x640 one: 430 plus
+        # everything above it is more than that window has, and a QVBoxLayout
+        # that cannot fit its children draws them on top of each other. The
+        # selected-count line, the note and the DELETE BUTTON were painted
+        # across the middle of the list of things they were about to delete.
+        #
+        # A stretch of 1 with a small floor gets the same 430-and-more where
+        # there is room, and lets the tree's own scrollbar absorb the
+        # shortfall where there is not -- which is what a scrolling list is
+        # for. The controls under it keep their space at every size.
+        self.tree.setMinimumHeight(150)
         self.tree.itemChanged.connect(self._on_tick)
         layout.addWidget(self.tree, 1)
 
@@ -135,6 +146,9 @@ class CleanupPanel(QWidget):
             item.setData(0, Qt.ItemDataRole.UserRole, id(entry))
             self._entries[id(entry)] = entry
             item.setToolTip(3, entry.reason)
+            # The names are long and the column truncates them. Whoever is
+            # about to delete something has to be able to read WHICH thing.
+            item.setToolTip(0, f"{entry.name}\n{entry.path}")
             self.tree.addTopLevelItem(item)
             self._colour_row(item, entry)
 
@@ -200,9 +214,20 @@ class CleanupPanel(QWidget):
         chosen = self._selected_entries()
         self.delete_button.setEnabled(bool(chosen))
         if not chosen:
+            # Disabled, and saying why. On the one screen in the app where a
+            # mistake cannot be undone, a button that will not explain itself
+            # is the last thing anybody needs.
+            self.delete_button.setToolTip(
+                "Nothing is ticked. Tick what you want gone first — nothing "
+                "is ever ticked for you."
+            )
             self.selection_label.setText("Nothing selected.")
             theme.repolish(self.selection_label, "Muted")
             return
+        self.delete_button.setToolTip(
+            f"You will be shown exactly what goes, and asked to confirm, "
+            f"before anything is removed."
+        )
 
         total = sum(entry.size for entry in chosen)
         after = self._result.free_bytes + total
@@ -313,6 +338,9 @@ class CleanupWindow(QDialog):
     def __init__(self, card_root: Path, sessions: list, parent=None) -> None:
         super().__init__(parent)
         self.setWindowTitle("Clean up your DWARF card")
+        # Named, not styled inline. See QDialog#Sheet in theme.py for why a
+        # bare `background:` on a dialog is the wrong tool -- it cascades
+        # onto the children and takes the fill off the Danger button.
         self.setObjectName("Sheet")
         self.resize(920, 620)
 

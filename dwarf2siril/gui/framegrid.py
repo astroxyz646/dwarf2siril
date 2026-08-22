@@ -25,7 +25,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from PySide6.QtCore import QSize, Qt, Signal
-from PySide6.QtGui import QColor, QPixmap
+from PySide6.QtGui import QColor, QKeySequence, QPixmap
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
@@ -190,6 +190,9 @@ class StackGridWindow(QDialog):
         self._verdicts = verdicts or {}
 
         self.setWindowTitle(f"{session.display_target} — stack grid")
+        # Named, not styled inline. See QDialog#Sheet in theme.py for why a
+        # bare `background:` on a dialog is the wrong tool -- it cascades
+        # onto the children and takes the fill off the Danger button.
         self.setObjectName("Sheet")
         theme.follow(self)
         self.resize(1120, 760)
@@ -206,6 +209,25 @@ class StackGridWindow(QDialog):
         title.setObjectName("CardTitle")
         header.addWidget(title)
         header.addStretch(1)
+
+        # SELECTING AT SCALE. A session is 40 to 400 frames, and the only way
+        # to pick any of them was one Ctrl-click at a time -- fine for the
+        # three you spotted, hopeless for "sort worst first and take the top
+        # twenty", which is the whole reason the sort exists. Two buttons and
+        # Ctrl+A, sitting beside the sort they get used with.
+        self.select_all_button = QPushButton("Select all")
+        self.select_all_button.setObjectName("Ghost")
+        self.select_all_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.select_all_button.setToolTip("Select every frame shown  (Ctrl+A)")
+        self.select_all_button.clicked.connect(lambda: self._select_all(True))
+        header.addWidget(self.select_all_button)
+
+        self.select_none_button = QPushButton("Select none")
+        self.select_none_button.setObjectName("Ghost")
+        self.select_none_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.select_none_button.setToolTip("Clear the selection")
+        self.select_none_button.clicked.connect(lambda: self._select_all(False))
+        header.addWidget(self.select_none_button)
 
         header.addWidget(QLabel("Sort"))
         self.sort_box = QComboBox()
@@ -298,19 +320,61 @@ class StackGridWindow(QDialog):
     def _selected(self) -> list[FrameItem]:
         return [tile.item for tile in self.tiles if tile.selected]
 
+    def _select_all(self, everything: bool) -> None:
+        for tile in self.tiles:
+            tile.set_selected(everything)
+        self._on_selection()
+
+    def keyPressEvent(self, event) -> None:  # noqa: N802 - Qt naming
+        """Ctrl+A selects the lot; Escape clears before it closes.
+
+        Escape closing a dialog is the Qt default and stays that way -- but
+        with a selection made it means "never mind that", which is the same
+        word for a smaller undo. Only once there is nothing selected does it
+        close the window.
+        """
+        if event.matches(QKeySequence.StandardKey.SelectAll):
+            self._select_all(True)
+            return
+        if event.key() == Qt.Key.Key_Escape and self._selected():
+            self._select_all(False)
+            return
+        super().keyPressEvent(event)
+
     def _on_selection(self) -> None:
         chosen = self._selected()
         self.delete_button.setEnabled(bool(chosen))
         if not chosen:
+            # Disabled and saying so, on a button that deletes from a card
+            # with no Recycle Bin.
+            self.delete_button.setToolTip(
+                "No frames are selected. Ctrl-click frames, or use Select "
+                "all, and you will still be asked to confirm."
+            )
             self.selection_label.setText("Nothing selected.")
             theme.repolish(self.selection_label, "Muted")
             return
+        self.delete_button.setToolTip(
+            "You will be shown exactly which frames go, and asked to "
+            "confirm, before anything is removed."
+        )
         total = sum(folder_size(item.path)[0] for item in chosen)
+        remaining = len(self._items) - len(chosen)
         self.selection_label.setText(
             f"{len(chosen)} selected, {describe_size(total)}. "
-            f"{len(self._items) - len(chosen)} frames would remain."
+            f"{remaining} frames would remain."
+            + ("  ⚠ That is every frame in this session." if not remaining else "")
         )
-        theme.repolish(self.selection_label, "")
+        # Selecting the lot is the one selection worth colouring. With
+        # Select all a click away it is easy to reach by accident, and
+        # "0 frames would remain" in the same grey as every other count is
+        # the sort of thing that gets read after the fact.
+        #
+        # An object name rather than an inline colour: this line is rewritten
+        # on every selection change, but a palette switch is not a selection
+        # change, and an inline colour would sit here in the old palette
+        # until somebody happened to click a frame.
+        theme.repolish(self.selection_label, "Warn" if not remaining else "")
 
     # -- actions ---------------------------------------------------------
 
@@ -335,14 +399,28 @@ class StackGridWindow(QDialog):
         if not chosen:
             return
         total = sum(folder_size(item.path)[0] for item in chosen)
+        remaining = len(self._items) - len(chosen)
+
+        # Emptying a session is a different act from thinning one, and Select
+        # all makes it one click. It says so, and it costs the extra gesture
+        # whatever the frame count is.
+        warnings = []
+        if remaining == 0:
+            warnings.append(
+                f"This is EVERY frame in this session of "
+                f"{self._session.display_target}. Nothing of it is left to "
+                f"stack afterwards."
+            )
+
         request = DeleteRequest(
             paths=[item.path for item in chosen],
             total_bytes=total,
             what=f"{len(chosen)} frame{'s' if len(chosen) != 1 else ''}",
             where_from=self._session.display_target,
-            remaining=len(self._items) - len(chosen),
+            remaining=remaining,
             remaining_label="frames in this session",
-            grave=len(chosen) > 10,
+            grave=len(chosen) > 10 or remaining == 0,
+            warnings=warnings,
             detail=[item.name for item in chosen],
         )
         if not confirm_delete(request, self):
@@ -392,6 +470,9 @@ class FrameViewer(QDialog):
         self._cache: dict[int, QPixmap] = {}
 
         self.setWindowTitle("Frame viewer")
+        # Named, not styled inline. See QDialog#Sheet in theme.py for why a
+        # bare `background:` on a dialog is the wrong tool -- it cascades
+        # onto the children and takes the fill off the Danger button.
         self.setObjectName("Sheet")
         theme.follow(self)
         self.setWindowState(Qt.WindowState.WindowFullScreen)

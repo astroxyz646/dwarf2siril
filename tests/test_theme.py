@@ -169,6 +169,36 @@ class PaletteTest(unittest.TestCase):
                     ratio = contrast(getattr(palette, fg), getattr(palette, bg))
                     self.assertGreaterEqual(ratio, 4.2, f"{ratio:.2f}:1")
 
+    def test_the_focus_ring_is_visible_on_every_surface(self) -> None:
+        """Where the keyboard is has to be findable on all five palettes.
+
+        The ring is a 1px border and never text, so the bar is WCAG's 3:1 for
+        a non-text indicator rather than 4.5. It arrived as a single
+        hard-coded light blue, which is fine on the four dark palettes and
+        invisible on Daylight, so every palette states its own -- and this
+        checks each against the surfaces its controls actually sit on,
+        including the hover state, where the gap is always narrowest.
+        """
+        for palette in self.palettes():
+            for ground in ("BG", "SURFACE", "SURFACE_RAISED", "SURFACE_HOVER"):
+                with self.subTest(palette=palette.name, ground=ground):
+                    ratio = contrast(palette.FOCUS, getattr(palette, ground))
+                    self.assertGreaterEqual(ratio, 3.0, f"{ratio:.2f}:1")
+
+    def test_the_focus_ring_is_not_mistakable_for_the_accent(self) -> None:
+        """Focus says where the keyboard is; the accent says what is chosen.
+
+        Both are on screen at once, on controls that sit next to each other,
+        so a focused button and a selected one must not look like the same
+        state. The floor is Deep Space's own gap, which shipped: this asserts
+        no palette is tighter than the one users already have.
+        """
+        floor = contrast(theme.DEEP_SPACE.FOCUS, theme.DEEP_SPACE.ACCENT)
+        for palette in self.palettes():
+            with self.subTest(palette=palette.name):
+                gap = contrast(palette.FOCUS, palette.ACCENT)
+                self.assertGreaterEqual(gap, floor * 0.95, f"{gap:.2f}:1")
+
     def test_status_colours_are_readable_as_text(self) -> None:
         """Every status is written as words somewhere, not only as a swatch."""
         for palette in self.palettes():

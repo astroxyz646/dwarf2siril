@@ -68,6 +68,9 @@ class DeleteDialog(QDialog):
         theme.follow(self)
         self.setWindowTitle("Delete from your DWARF card")
         self.setMinimumWidth(520)
+        # Named, not styled inline. See QDialog#Sheet in theme.py for why a
+        # bare `background:` on a dialog is the wrong tool -- it cascades
+        # onto the children and takes the fill off the Danger button.
         self.setObjectName("Sheet")
 
         layout = QVBoxLayout(self)
@@ -124,6 +127,13 @@ class DeleteDialog(QDialog):
             listing.setReadOnly(True)
             listing.setPlainText("\n".join(request.detail))
             listing.setMaximumHeight(150)
+            # ONE LINE PER THING, scrolling sideways if it has to. A DWARF
+            # session folder name is 50-odd characters, and wrapped in a
+            # monospace box it broke across two lines mid-word -- so the list
+            # of what is about to be deleted permanently read as twice as
+            # many items as it contained, each of them mangled. Counting the
+            # rows is the first thing anyone does with this box.
+            listing.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
             # Styled in theme.py alongside the run panel's log, which is the
             # same thing: a padded, bordered box of monospace lines.
             listing.setObjectName("Listing")
@@ -166,7 +176,14 @@ class DeleteDialog(QDialog):
 
     def _sync_button(self) -> None:
         if self.confirm_tick is not None:
-            self.delete_button.setEnabled(self.confirm_tick.isChecked())
+            ready = self.confirm_tick.isChecked()
+            self.delete_button.setEnabled(ready)
+            # The extra gesture is deliberate, so the greyed button has to
+            # read as a step still to take rather than as one that has
+            # stopped working.
+            self.delete_button.setToolTip(
+                "" if ready else "Tick the box above first."
+            )
         else:
             self.delete_button.setEnabled(True)
 
