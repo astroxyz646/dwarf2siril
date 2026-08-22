@@ -30,7 +30,7 @@ import sys
 from pathlib import Path
 
 from PySide6.QtCore import QEvent, Qt, QTimer
-from PySide6.QtGui import QDesktopServices, QFont, QIcon
+from PySide6.QtGui import QDesktopServices, QFont, QIcon, QKeySequence, QShortcut
 from PySide6.QtCore import QUrl
 from PySide6.QtWidgets import (
     QApplication,
@@ -629,6 +629,7 @@ class MainWindow(QWidget):
         self._frame_verdicts: dict[str, str] = {}
 
         self._build_ui()
+        self._install_shortcuts()
         QTimer.singleShot(150, self._look_for_drives)
 
     def showEvent(self, event) -> None:  # noqa: N802 - Qt naming
@@ -645,6 +646,62 @@ class MainWindow(QWidget):
             text=theme.TEXT,
             border=theme.BORDER,
         )
+
+    # -- keyboard --------------------------------------------------------
+
+    # Every one of these is ALSO a button on screen, and the button's
+    # tooltip names its key. A shortcut nobody can discover is a shortcut
+    # for the person who wrote it; a shortcut written on the control it
+    # duplicates is how somebody learns the app gets faster with use.
+    SHORTCUTS = [
+        ("Ctrl+O", "_choose_source"),
+        ("F5", "_rescan_current"),
+        ("Ctrl+R", "_rescan_current"),
+        ("Ctrl+Shift+O", "_choose_output"),
+        ("Ctrl+1", "_shortcut_stack"),
+        ("Ctrl+2", "_shortcut_manage"),
+        ("Ctrl+3", "_shortcut_clean"),
+    ]
+
+    def _install_shortcuts(self) -> None:
+        self._shortcuts = []
+        for keys, method in self.SHORTCUTS:
+            shortcut = QShortcut(QKeySequence(keys), self)
+            shortcut.activated.connect(getattr(self, method))
+            self._shortcuts.append(shortcut)
+
+        self.rescan_button.setToolTip(
+            "Read the card again (F5). Anything you have changed on it since "
+            "the last look is picked up."
+        )
+        for button, keys in (
+            (self.mode_buttons[MODE_STACK], "Ctrl+1"),
+            (self.mode_buttons[MODE_MANAGE], "Ctrl+2"),
+            (self.mode_buttons[MODE_CLEAN], "Ctrl+3"),
+        ):
+            button.setToolTip(f"{button.toolTip()}  ({keys})")
+
+    def _rescan_current(self) -> None:
+        """F5 means "look again" at whatever you are looking at.
+
+        With a card open that is the card -- re-reading it is what somebody
+        pressing F5 wants after deleting frames or plugging in a second
+        night. With nothing open there is nothing to re-read, so it falls
+        back to hunting for drives, which is the same intent one step back.
+        """
+        if self.source_root is not None:
+            self._start_scan(self.source_root)
+        else:
+            self._look_for_drives()
+
+    def _shortcut_stack(self) -> None:
+        self._set_mode(MODE_STACK)
+
+    def _shortcut_manage(self) -> None:
+        self._set_mode(MODE_MANAGE)
+
+    def _shortcut_clean(self) -> None:
+        self._set_mode(MODE_CLEAN)
 
     # -- layout ----------------------------------------------------------
 
@@ -1176,6 +1233,10 @@ class MainWindow(QWidget):
         browse = QPushButton("Choose folder...")
         browse.setObjectName("Ghost")
         browse.setCursor(Qt.CursorShape.PointingHandCursor)
+        browse.setToolTip(
+            "Point at the drive itself or at the Astronomy folder inside it "
+            "— either works.  (Ctrl+O)"
+        )
         browse.clicked.connect(self._choose_source)
         picker.addWidget(browse)
 
@@ -1621,7 +1682,10 @@ class MainWindow(QWidget):
         choose = QPushButton("Choose...")
         choose.setObjectName("Ghost")
         choose.setCursor(Qt.CursorShape.PointingHandCursor)
-        choose.setToolTip("Pick an empty folder for the Siril project")
+        choose.setToolTip(
+            "Pick a folder for the Siril projects. Each target gets its own "
+            "subfolder inside it.  (Ctrl+Shift+O)"
+        )
         choose.clicked.connect(self._choose_output)
         row.addWidget(choose)
         layout.addLayout(row)

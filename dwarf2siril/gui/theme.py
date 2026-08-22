@@ -58,6 +58,21 @@ ACCENT_PRESSED = "#3B79BE"
 ACCENT_DIM = "#2E567F"
 ACCENT_FG = "#04101C"
 
+# The keyboard focus ring. A SEPARATE token from the accent because it is
+# doing a different job: the accent marks what is selected, focus marks
+# where the keyboard is, and the two are on screen at the same time. It was
+# ACCENT_DIM, which on a near-black surface is a 1px line at about the same
+# lightness as the border it replaces -- tabbing through the window moved
+# something you could not see. Brighter than the accent, so a focused
+# primary button and an unfocused one are different at a glance, and light
+# enough to clear WCAG's 3:1 for a non-text indicator against every surface
+# in this file.
+#
+# It stays ONE PIXEL. Every control here keeps a 1px border at all times so
+# that gaining focus recolours it rather than resizing the control and
+# shoving its neighbours along the row; a 2px ring would undo that.
+FOCUS = "#8FC2F5"
+
 # ---- status --------------------------------------------------------------
 # Each of these has to survive being seen next to the accent, so all three
 # sit well away from it in hue. RUNNING is the odd one out and the reason it
@@ -248,7 +263,7 @@ def stylesheet() -> str:
         background: {SURFACE_RAISED};
         color: {TEXT};
     }}
-    QPushButton#Mode:focus {{ border: 1px solid {ACCENT_DIM}; }}
+    QPushButton#Mode:focus {{ border: 1px solid {FOCUS}; }}
     /* The dangerous mode is the only one that colours itself, and only once
        you are actually in it. */
     QPushButton#ModeDanger:checked {{
@@ -291,7 +306,7 @@ def stylesheet() -> str:
         background: {tint(TEXT, 0x0D)};
     }}
     QPushButton#SidebarToggle:pressed {{ background: {tint(TEXT, 0x1A)}; }}
-    QPushButton#SidebarToggle:focus {{ border: 1px solid {ACCENT_DIM}; }}
+    QPushButton#SidebarToggle:focus {{ border: 1px solid {FOCUS}; }}
 
     /* ---- surfaces the header and footer sit on ---------------------- */
     QWidget#Chrome {{ background: {SURFACE}; }}
@@ -321,7 +336,7 @@ def stylesheet() -> str:
         background: {SURFACE_RAISED};
         border: 1px solid {ACCENT};
     }}
-    QPushButton#DriveTile:focus {{ border: 1px solid {ACCENT_DIM}; }}
+    QPushButton#DriveTile:focus {{ border: 1px solid {FOCUS}; }}
 
     /* ---- buttons --------------------------------------------------- */
     /* Every button keeps a 1px border at all times, transparent when it is
@@ -336,7 +351,7 @@ def stylesheet() -> str:
     }}
     QPushButton:hover {{ background: {SURFACE_HOVER}; border-color: {BORDER_STRONG}; }}
     QPushButton:pressed {{ background: {SURFACE_PRESSED}; }}
-    QPushButton:focus {{ border: 1px solid {ACCENT_DIM}; }}
+    QPushButton:focus {{ border: 1px solid {FOCUS}; }}
     QPushButton:disabled {{
         color: {TEXT_FAINT};
         background: {SURFACE};
@@ -406,7 +421,7 @@ def stylesheet() -> str:
         border-color: {BORDER_STRONG};
     }}
     QPushButton#Ghost:pressed {{ background: {SURFACE_PRESSED}; }}
-    QPushButton#Ghost:focus {{ border-color: {ACCENT_DIM}; }}
+    QPushButton#Ghost:focus {{ border-color: {FOCUS}; }}
 
     QPushButton#Link {{
         background: transparent;
@@ -419,7 +434,7 @@ def stylesheet() -> str:
     }}
     QPushButton#Link:hover {{ color: {ACCENT}; }}
     QPushButton#Link:pressed {{ color: {ACCENT_PRESSED}; }}
-    QPushButton#Link:focus {{ border-color: {ACCENT_DIM}; }}
+    QPushButton#Link:focus {{ border-color: {FOCUS}; }}
 
     /* ---- inputs ---------------------------------------------------- */
     QLineEdit {{
@@ -474,6 +489,13 @@ def stylesheet() -> str:
     }}
     QCheckBox::indicator:disabled {{ border-color: {BORDER}; background: {SURFACE}; }}
     QCheckBox:disabled {{ color: {TEXT_FAINT}; }}
+    /* Keyboard focus on a tick box has to be visible on the BOX, not on the
+       word beside it -- the box is the control. Written AFTER the checked
+       rules on purpose: Qt resolves equal specificity by source order, so a
+       focus border placed above ::indicator:checked is simply overwritten
+       by it, and tabbing onto a ticked box shows nothing at all. */
+    QCheckBox::indicator:focus {{ border: 1px solid {FOCUS}; }}
+    QCheckBox::indicator:checked:focus {{ border: 1px solid {FOCUS}; }}
 
     /* ---- radio buttons and sliders ---------------------------------- */
     /* Both were left to the platform style before, which on Windows draws
@@ -499,6 +521,8 @@ def stylesheet() -> str:
             stop: 0.55 {BG}, stop: 1 {BG}
         );
     }}
+    QRadioButton::indicator:focus {{ border: 1px solid {FOCUS}; }}
+    QRadioButton::indicator:checked:focus {{ border: 1px solid {FOCUS}; }}
     QRadioButton:disabled {{ color: {TEXT_FAINT}; }}
 
     QSlider::groove:horizontal {{
