@@ -1,4 +1,4 @@
-"""The window's colours, and the palettes it can wear.
+"""The window's colours, and the five palettes it can wear.
 
 Tuned for the situation the tool is used in: a dark room, at night, often
 straight after a session. The default background is near-black rather than
@@ -11,7 +11,8 @@ so it reads as a calm, deliberate highlight rather than a light source. Note
 that blue is the WORST colour for dark adaptation -- short-wavelength light
 costs the most of it, which is why red torches are standard at a telescope --
 so this is a considered aesthetic choice, not a physiological one. Anyone at
-the eyepiece should be dimming their screen anyway.
+the eyepiece should be dimming their screen anyway, or reaching for the Red
+Night palette below, which exists for exactly that argument.
 
 Everything is one flat token set so the whole window stays consistent.
 Nothing outside this module should name a colour: if a widget needs one, it
@@ -189,8 +190,214 @@ DEEP_SPACE = Palette(
     WASH_HARD=0x1A,
 )
 
+# Red Night is not a skin. Short-wavelength light costs the most dark
+# adaptation, which is why red torches are standard at a telescope, so this
+# palette avoids blue everywhere it can and keeps TOTAL LIGHT OUTPUT low: the
+# surfaces are darker than Deep Space's and nothing on screen is allowed to
+# be near-white.
+#
+# THE INTERESTING PROBLEM is the status colours. Normally OK / WARN / ERROR
+# are told apart by hue -- green, amber, red -- and here the whole usable
+# range is about 0 to 40 degrees. So they are separated on the two axes that
+# are left, CHROMA and LIGHTNESS, and each one's position is chosen to match
+# what it means:
+#
+#   OK       dusty rose. The LEAST saturated thing on screen, deliberately:
+#            "nothing to see here" should not catch the eye at all.
+#   RUNNING  the LIGHTEST, at L* 88 against everything else's 53 to 68 --
+#            the one place this palette spends any brightness. Motion reads
+#            as something being lit up, and it is drawn as a thin progress
+#            bar and a short label rather than as a field of colour, so the
+#            light it actually puts out is small.
+#   WARN     amber, the furthest hue shift the palette permits -- still well
+#            past 590nm, so it costs no more adaptation than the red does.
+#   ERROR    the MOST saturated, and the only pure red. Nothing else in the
+#            palette is allowed near that chroma, which is what makes it read
+#            as an alarm rather than as more decoration.
+#
+# The accent then has to stay clear of all four, so it is a muted terracotta:
+# darker and far less saturated than ERROR, browner than WARN.
+#
+# WARN and RUNNING were the pair this got wrong first time, and the test
+# caught it: both warm, both light, eight L* apart and only 30 delta-E. WARN
+# came down and RUNNING went up until no two statuses are close on BOTH axes.
+# tests/test_theme.py holds that shape rather than a colour list.
+RED_NIGHT = Palette(
+    name="Red Night",
+    dark=True,
+    BG_SUNKEN="#040000",
+    SUNKEN_TEXT="#C07E6B",
+    SUNKEN_TEXT_BRIGHT="#F0BCA9",
+    BG="#0A0303",
+    SURFACE="#180808",
+    SURFACE_RAISED="#220C0B",
+    SURFACE_HOVER="#2F1210",
+    SURFACE_PRESSED="#1C0908",
+    BORDER="#2A100E",
+    BORDER_STRONG="#421A16",
+    BORDER_BRIGHT="#5C2822",
+    TEXT_BRIGHT="#FFD5C6",
+    TEXT="#F0BCA9",
+    TEXT_MUTED="#C07E6B",
+    TEXT_FAINT="#8C5748",
+    ACCENT="#C4634D",
+    ACCENT_HOVER="#D77861",
+    ACCENT_PRESSED="#B85C48",
+    ACCENT_DIM="#5E2A1E",
+    ACCENT_FG="#170403",
+    OK="#C99A8E",
+    WARN="#E89330",
+    ERROR="#F2372A",
+    ERROR_HOVER="#FF5244",
+    ERROR_PRESSED="#DC3226",
+    RUNNING="#FFD4BC",
+    DANGER_FG="#1A0302",
+    WASH_SOFT=0x0E,
+    WASH_HARD=0x22,
+)
+
+# Dark plum surfaces with a magenta-violet accent. The status set can stay
+# close to Deep Space's, because none of green / amber / red / teal is
+# anywhere near magenta -- here the ACCENT moved out of their way rather than
+# the other way round. ERROR is pushed a little warmer so that "red" and
+# "magenta" cannot be confused at pill size.
+NEBULA = Palette(
+    name="Nebula",
+    dark=True,
+    BG_SUNKEN="#05030A",
+    SUNKEN_TEXT="#A392BC",
+    SUNKEN_TEXT_BRIGHT="#EDE6F7",
+    BG="#0D0A15",
+    SURFACE="#191227",
+    SURFACE_RAISED="#231933",
+    SURFACE_HOVER="#2E2144",
+    SURFACE_PRESSED="#1B1329",
+    BORDER="#261B39",
+    BORDER_STRONG="#3A2A53",
+    BORDER_BRIGHT="#513C6E",
+    TEXT_BRIGHT="#FFFFFF",
+    TEXT="#EDE6F7",
+    TEXT_MUTED="#A392BC",
+    TEXT_FAINT="#786A93",
+    ACCENT="#BB69D6",
+    ACCENT_HOVER="#CB80E2",
+    ACCENT_PRESSED="#A455C2",
+    ACCENT_DIM="#5B3070",
+    ACCENT_FG="#150520",
+    OK="#4FC98C",
+    WARN="#E3A93F",
+    ERROR="#EE5F4A",
+    ERROR_HOVER="#F8735E",
+    ERROR_PRESSED="#D24E3B",
+    RUNNING="#38BEC9",
+    DANGER_FG="#1E0703",
+    WASH_SOFT=0x0C,
+    WASH_HARD=0x1C,
+)
+
+# Warm dark browns with an ochre accent. This one has the opposite problem to
+# Nebula: the accent has moved INTO the warn/error family, so the statuses
+# have to move instead. WARN becomes a clear yellow rather than amber, OK a
+# sage green that belongs on rust, and RUNNING a cooler teal-green. ERROR
+# keeps the Deep Space red, which is as far from ochre as anything warm gets.
+MARS = Palette(
+    name="Mars",
+    dark=True,
+    BG_SUNKEN="#080503",
+    SUNKEN_TEXT="#B39A81",
+    SUNKEN_TEXT_BRIGHT="#F2E6D8",
+    BG="#120D09",
+    SURFACE="#1F1711",
+    SURFACE_RAISED="#2A2017",
+    SURFACE_HOVER="#372A1E",
+    SURFACE_PRESSED="#231A13",
+    BORDER="#2C2118",
+    BORDER_STRONG="#413226",
+    BORDER_BRIGHT="#5A4634",
+    TEXT_BRIGHT="#FFFBF5",
+    TEXT="#F2E6D8",
+    TEXT_MUTED="#B39A81",
+    TEXT_FAINT="#8B735D",
+    ACCENT="#C68C36",
+    ACCENT_HOVER="#DAA24C",
+    ACCENT_PRESSED="#AE7830",
+    ACCENT_DIM="#5E4326",
+    ACCENT_FG="#190D04",
+    OK="#7ABE52",
+    WARN="#F7E88C",
+    ERROR="#E5675E",
+    ERROR_HOVER="#EE7C73",
+    ERROR_PRESSED="#CF574F",
+    RUNNING="#3FBFC4",
+    DANGER_FG="#1A0806",
+    WASH_SOFT=0x0C,
+    WASH_HARD=0x1E,
+)
+
+# The light one, and the risky one: every rule in this file was written
+# assuming a near-black ground. Each assumption was taken separately rather
+# than inverting the numbers.
+#
+#   SURFACES   still go "further forward = further from the ground", which on
+#              light means a card is WHITER than the window behind it and a
+#              pressed control is DARKER. The order of the tokens is
+#              unchanged; only the direction of travel flipped.
+#   BG_SUNKEN  STAYS DARK. It is the mount behind a photograph, and an
+#              astrophoto is almost all near-black -- a white mount around it
+#              glares, and the picture's own faint detail disappears into the
+#              surround. It is the one place a light theme should not be
+#              light, which is why SUNKEN_TEXT exists as its own token.
+#   ACCENT_FG  is WHITE. Deep Space's near-black works because its accent is
+#              a light blue; Daylight's accent is a deep blue that carries
+#              white and nothing else.
+#   DANGER_FG  same reasoning, same answer.
+#   WASHES     tint(TEXT, alpha) is a near-BLACK wash here rather than a pale
+#              one. It still works -- it darkens a light surface the way the
+#              pale one lightens a dark surface -- but it needs more alpha to
+#              be seen at all, which is why WASH_* is per-palette.
+#   STATUSES   are all pulled down in lightness. A #4FC98C green that reads
+#              as "fine" on near-black is illegible as text on white, so
+#              every status here is a deep version of its hue, chosen to
+#              clear 4.5:1 against the surfaces it is drawn on.
+#   TITLE BAR  dark=False, so Windows draws its light caption rather than
+#              painting light text on a light caption. See windows_theme.
+DAYLIGHT = Palette(
+    name="Daylight",
+    dark=False,
+    BG_SUNKEN="#12151B",
+    SUNKEN_TEXT="#8F99A8",
+    SUNKEN_TEXT_BRIGHT="#F2F5FA",
+    BG="#EDF1F7",
+    SURFACE="#F9FBFE",
+    SURFACE_RAISED="#FFFFFF",
+    SURFACE_HOVER="#E7EDF6",
+    SURFACE_PRESSED="#D9E1EE",
+    BORDER="#D8DFEA",
+    BORDER_STRONG="#B9C4D4",
+    BORDER_BRIGHT="#93A1B5",
+    TEXT_BRIGHT="#000000",
+    TEXT="#141C27",
+    TEXT_MUTED="#4E5A6B",
+    TEXT_FAINT="#68748A",
+    ACCENT="#1F5FAB",
+    ACCENT_HOVER="#174E8F",
+    ACCENT_PRESSED="#123E73",
+    ACCENT_DIM="#AFC9E8",
+    ACCENT_FG="#FFFFFF",
+    OK="#1A7345",
+    WARN="#8A5D08",
+    ERROR="#BC2E25",
+    ERROR_HOVER="#A2241C",
+    ERROR_PRESSED="#851B14",
+    RUNNING="#0B6E7D",
+    DANGER_FG="#FFFFFF",
+    WASH_SOFT=0x12,
+    WASH_HARD=0x24,
+)
+
 PALETTES: dict[str, Palette] = {
-    palette.name: palette for palette in (DEEP_SPACE,)
+    palette.name: palette
+    for palette in (DEEP_SPACE, RED_NIGHT, NEBULA, MARS, DAYLIGHT)
 }
 
 DEFAULT_PALETTE = DEEP_SPACE.name
