@@ -25,6 +25,7 @@ cards, which is exactly the chunky layout the grid replaced.
 
 from __future__ import annotations
 
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -562,6 +563,67 @@ class _StatePanel(QFrame):
             parent.layout().invalidate()
             parent.layout().activate()
         self._pin_labels()
+
+
+def _plain_error(message: str, output_dir: Path | None = None) -> str:
+    """Say what went wrong, why, and what to do -- not just what Python said.
+
+    A build fails through the operating system, so what arrives here is
+    something like "[Errno 28] No space left on device: 'E:/Astro/...'". That
+    is the truth and it is worth keeping, but on its own it asks the user to
+    know what an errno is before they can act. Each of the handful that
+    actually happen when copying gigabytes off a card gets a sentence naming
+    the cause and the fix, with the original underneath so nothing is hidden
+    from somebody who does want it.
+
+    Anything unrecognised falls through unchanged rather than being wrapped
+    in a guess -- a wrong explanation is worse than none.
+    """
+    lowered = message.lower()
+    where = f" ({output_dir})" if output_dir is not None else ""
+
+    def code(*names: str) -> bool:
+        """Match an errno or WinError EXACTLY, not as a prefix.
+
+        "errno 2" is a substring of "errno 28", so a plain `in` test hands
+        the disk-full case the card-was-unplugged explanation. A number has
+        to end where the message says it ends.
+        """
+        return any(
+            re.search(rf"{name}", lowered) for name in names
+        )
+
+    if "no space left" in lowered or code(r"errno 28", r"winerror 112"):
+        return (
+            f"The output drive is full{where}.\n\nA stack copies every frame "
+            f"off the card, so it needs as much room as the sessions take up. "
+            f"Free some space, or choose an output folder on another drive, "
+            f"and press Prepare again. Nothing on your DWARF card was "
+            f"touched.\n\n{message}"
+        )
+    if "permission denied" in lowered or code(r"errno 13", r"winerror 5"):
+        return (
+            f"Windows would not let this app write there{where}.\n\nThat is "
+            f"usually a folder inside Program Files or on a read-only drive, "
+            f"or a file still open in Siril. Pick an output folder somewhere "
+            f"like your Pictures or another drive and try again.\n\n{message}"
+        )
+    if "cannot find" in lowered or code(r"errno 2", r"winerror 3"):
+        return (
+            "Something that was there when the card was read has gone.\n\n"
+            "That normally means the card was unplugged, or a folder was "
+            "renamed or deleted while this was running. Press Rescan to read "
+            "the card again, then Prepare.\n\n" + message
+        )
+    if "too long" in lowered or code(r"winerror 206", r"errno 36"):
+        return (
+            f"The path was too long for Windows{where}.\n\nDWARF target and "
+            f"session names are long, and Windows still refuses paths past "
+            f"260 characters in many places. Choose an output folder closer "
+            f"to the top of a drive -- E:\\Astro rather than something "
+            f"several folders deep -- and try again.\n\n{message}"
+        )
+    return message
 
 
 def _step_heading(number: int, title: str, hint: str) -> QWidget:
@@ -1334,26 +1396,41 @@ class MainWindow(QWidget):
         self._drive_scanner.found.connect(self._show_drives)
         self._drive_scanner.start()
 
-    def _show_drives(self, candidates: list) -> None:
-        self._clear_layout(self.drive_row)
-        if not candidates:
-            # Two different sentences, because a card being open changes what
-            # the absence of a drive MEANS. With nothing open it is the thing
-            # blocking you; with a folder already read it is a footnote.
+    def _refresh_drive_status(self) -> None:
+        """Reword the drive line for whether anything is open yet.
+
+        A card being open changes what the ABSENCE of a drive means: with
+        nothing open it is the thing blocking you, with a folder already read
+        it is a footnote about switching. It has to be rewritten when a scan
+        finishes as well as when the drive hunt does, or the first wording --
+        "Plug the card in and hit Rescan, or choose the folder below" --
+        stays on screen underneath six sessions it has just read.
+        """
+        if getattr(self, "_drive_candidates", None):
+            count = len(self._drive_candidates)
+            many = count > 1
+            self.drive_status.setText(
+                f"Found {count} drive{'s' if many else ''} that "
+                f"look{'' if many else 's'} like a DWARF 3:"
+            )
+        elif self.source_root is None:
             self.drive_status.setText(
                 "No DWARF 3 drive spotted. Plug the card in and hit Rescan, "
                 "or choose the folder below."
-                if self.source_root is None
-                else "No DWARF 3 drive spotted — plug one in and hit Rescan "
-                "to switch to it."
             )
+        else:
+            self.drive_status.setText(
+                "No DWARF 3 drive spotted — plug one in and hit Rescan to "
+                "switch to it."
+            )
+
+    def _show_drives(self, candidates: list) -> None:
+        self._clear_layout(self.drive_row)
+        self._drive_candidates = list(candidates)
+        self._refresh_drive_status()
+        if not candidates:
             return
 
-        many = len(candidates) > 1
-        self.drive_status.setText(
-            f"Found {len(candidates)} drive{'s' if many else ''} that "
-            f"look{'' if many else 's'} like a DWARF 3:"
-        )
         for candidate in candidates:
             tile = DriveTile(
                 candidate.display,
@@ -1441,6 +1518,7 @@ class MainWindow(QWidget):
         self.scan_worker.start()
 
     def _on_scan_failed(self, message: str) -> None:
+        message = _plain_error(message, self.source_root)
         self.progress.hide()
         self.status.setText("Could not read that folder.")
         self._set_source_summary("That folder could not be read.", theme.ERROR)
@@ -1510,6 +1588,7 @@ class MainWindow(QWidget):
             theme.OK,
         )
 
+        self._refresh_drive_status()
         self.targets_state.hide()
         self.grid_host.show()
         self.step2_heading.hint_label.setVisible(True)
@@ -1585,6 +1664,7 @@ class MainWindow(QWidget):
             f"{self._card_name()} was read, and holds nothing to stack.",
             theme.WARN,
         )
+        self._refresh_drive_status()
         self.grid_host.hide()
         self.targets_state.show_state(
             title,
@@ -1955,7 +2035,9 @@ class MainWindow(QWidget):
     def _on_build_failed(self, message: str) -> None:
         self._end_build()
         self.status.setText("Build failed.")
-        self._warn("Could not build that stack", message)
+        self._warn(
+            "Could not build that stack", _plain_error(message, self.output_dir)
+        )
 
     def _on_build_cancelled(self, message: str) -> None:
         self._end_build()
