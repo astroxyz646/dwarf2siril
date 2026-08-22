@@ -79,11 +79,20 @@ class CleanupPanel(QWidget):
         self.tree.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
         # Surface, border, row padding and header are all in theme.py: this
         # is the only tree in the app, but its colours are not its own.
-        # Tall enough to show a whole card's worth of folders without
-        # scrolling. As a mode rather than a dialog this panel shares a
-        # scrolling column, so it has to ask for its height rather than
-        # being handed whatever is left over.
-        self.tree.setMinimumHeight(430)
+        #
+        # THE TREE TAKES WHAT IS LEFT, and never demands more. It asked for
+        # 430px so a whole card's folders fit without scrolling, which is
+        # right on a big window and impossible on a 900x640 one: 430 plus
+        # everything above it is more than that window has, and a QVBoxLayout
+        # that cannot fit its children draws them on top of each other. The
+        # selected-count line, the note and the DELETE BUTTON were painted
+        # across the middle of the list of things they were about to delete.
+        #
+        # A stretch of 1 with a small floor gets the same 430-and-more where
+        # there is room, and lets the tree's own scrollbar absorb the
+        # shortfall where there is not -- which is what a scrolling list is
+        # for. The controls under it keep their space at every size.
+        self.tree.setMinimumHeight(150)
         self.tree.itemChanged.connect(self._on_tick)
         layout.addWidget(self.tree, 1)
 

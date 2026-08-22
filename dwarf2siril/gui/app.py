@@ -1779,7 +1779,12 @@ class MainWindow(QWidget):
             box = QMessageBox(self)
             box.setWindowTitle("Stacking without darks")
             box.setIcon(QMessageBox.Icon.Information)
-            box.setText("This will stack without darks — that is fine.")
+            # The headline asks the QUESTION and names the target, rather
+            # than repeating the first sentence of the advice underneath it.
+            # It did, word for word, so the box opened by saying the same
+            # thing twice -- which reads as a stutter and costs the headline
+            # the one job it has.
+            box.setText(f"Prepare {group.display_target} without darks?")
             box.setInformativeText(group.dark_advice)
             box.setStandardButtons(
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No

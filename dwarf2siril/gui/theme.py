@@ -646,6 +646,26 @@ def stylesheet() -> str:
         border-radius: {RADIUS_SM}px;
         padding: 6px 10px;
     }}
+
+    /* ---- message boxes ---------------------------------------------- */
+    /* Every warning and every question in this app is a QMessageBox, and
+       none of them were styled -- so its headline, which Qt puts in a label
+       of its own, was drawn at exactly the same size and weight as the
+       paragraph under it. A box whose first line is meant to be read first
+       has to look like it. Named sub-widgets rather than a blanket QLabel
+       rule, so the informative text keeps the body size. */
+    QMessageBox {{ background: {BG}; }}
+    QMessageBox QLabel#qt_msgbox_label {{
+        font-size: 11.5pt;
+        font-weight: 620;
+        color: {TEXT};
+    }}
+    QMessageBox QLabel#qt_msgbox_informativelabel {{
+        color: {TEXT_MUTED};
+    }}
+    /* Wide enough not to read as a pair of afterthoughts under a paragraph
+       that long. */
+    QMessageBox QPushButton {{ min-width: 96px; }}
     """
 
 
