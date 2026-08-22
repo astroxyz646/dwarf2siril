@@ -452,6 +452,118 @@ def _explainer(text: str) -> QLabel:
     return label
 
 
+class _StatePanel(QFrame):
+    """What step 2 says when it has no cards to show.
+
+    Every state the target grid can be in that is NOT "here are your
+    targets" gets a headline, a sentence saying what is going on, an
+    optional detail line naming what the scanner actually objected to, and
+    the buttons that get you out of it. One panel with four states rather
+    than four one-line labels scattered through the flow, so an empty
+    screen can never be silent again.
+    """
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setObjectName("Card")
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(
+            theme.SPACE_5, theme.SPACE_4, theme.SPACE_5, theme.SPACE_4
+        )
+        layout.setSpacing(theme.SPACE_2)
+
+        self.title = _label("", "CardTitle", wrap=True)
+        layout.addWidget(self.title)
+
+        self.body = _label("", "Muted", wrap=True)
+        layout.addWidget(self.body)
+
+        self.detail = _label("", "Faint", wrap=True)
+        self.detail.hide()
+        layout.addWidget(self.detail)
+
+        self.actions_host = QWidget()
+        self.actions_host.setObjectName("Plain")
+        self.actions = QHBoxLayout(self.actions_host)
+        self.actions.setContentsMargins(0, theme.SPACE_2, 0, 0)
+        self.actions.setSpacing(theme.SPACE_2)
+        self.actions_host.hide()
+        layout.addWidget(self.actions_host)
+
+    def resizeEvent(self, event) -> None:  # noqa: N802 - Qt naming
+        """Pin the wrapping labels to the height they need AT THIS WIDTH.
+
+        Same disease as the sidebar, same cure, kept local to this panel. A
+        word-wrapped QLabel reports a sizeHint worked out at whatever width
+        it was last asked about, and before the column has been laid out that
+        is the wrong width -- so a one-line sentence claims two lines, the
+        panel claims a height it does not need, the layout squeezes it back
+        to what it will give, and the text floats in the middle of a box with
+        holes above and below it.
+
+        Measured at 1280x880 before this: a 21px heading claiming 42, a 34px
+        sentence claiming 68, in a panel squeezed to 171 of the 205 it asked
+        for.
+        """
+        super().resizeEvent(event)
+        self._pin_labels()
+
+    def _pin_labels(self) -> None:
+        for label in (self.title, self.body, self.detail):
+            if not label.isVisible():
+                continue
+            width = label.width()
+            if width <= 0:
+                continue
+            needed = label.heightForWidth(width)
+            if needed > 0 and label.height() != needed:
+                label.setFixedHeight(needed)
+
+    def set_body(self, text: str) -> None:
+        """Replace the running line without letting the panel jump around."""
+        self.body.setText(text)
+        self._pin_labels()
+
+    def show_state(self, title, body, detail="", actions=()) -> None:
+        self.title.setText(title)
+        self.body.setText(body)
+        self.detail.setText(detail)
+        self.detail.setVisible(bool(detail))
+
+        while self.actions.count():
+            item = self.actions.takeAt(0)
+            if item.widget() is not None:
+                item.widget().deleteLater()
+        for label, handler, primary in actions:
+            button = QPushButton(label)
+            button.setObjectName("Primary" if primary else "Ghost")
+            button.setCursor(Qt.CursorShape.PointingHandCursor)
+            button.clicked.connect(handler)
+            self.actions.addWidget(button)
+        if actions:
+            self.actions.addStretch(1)
+        self.actions_host.setVisible(bool(actions))
+        self.show()
+        # New text, new heights, and the column above has to be told. Four
+        # lines of "waiting for a card" and one line of "reading the card"
+        # are very different heights, and without this the panel keeps the
+        # taller of the two and spreads the difference between its own
+        # children -- the state changes correctly and looks wrong.
+        self._pin_labels()
+        QTimer.singleShot(0, self._settle)
+
+    def _settle(self) -> None:
+        self._pin_labels()
+        self.layout().invalidate()
+        self.layout().activate()
+        self.updateGeometry()
+        parent = self.parentWidget()
+        if parent is not None and parent.layout() is not None:
+            parent.layout().invalidate()
+            parent.layout().activate()
+        self._pin_labels()
+
+
 def _step_heading(number: int, title: str, hint: str) -> QWidget:
     holder = QWidget()
     holder.setObjectName("Plain")   # sits on the sidebar surface as well as the body
@@ -575,12 +687,49 @@ class MainWindow(QWidget):
         )
         self.body_layout.addWidget(self._source_section())
 
+        # STEP 2 EXISTS FROM THE FIRST FRAME, and so does something in it.
+        #
+        # It used to be built by _on_scanned, which meant that until a card
+        # had been read the whole left column below step 1 was an unbroken
+        # black rectangle: no step 2, no sign that there was going to be one,
+        # nothing to read while the scan ran, and one grey sentence when a
+        # card turned out to hold nothing. A blank half-screen is not a
+        # neutral state -- it reads as a broken window, and it is exactly
+        # where a first-time user is standing.
+        #
+        # The heading and the placeholder are built once and live for the
+        # life of the window; only the grid of cards is rebuilt on a rescan.
         self.results_area = QWidget()
+        self.results_area.setObjectName("Plain")
         self.results_layout = QVBoxLayout(self.results_area)
         self.results_layout.setContentsMargins(0, 0, 0, 0)
         self.results_layout.setSpacing(theme.SPACE_3)
+
+        self.step2_heading = _step_heading(2, "Choose what to stack", "")
+        self.results_layout.addWidget(self.step2_heading)
+
+        self.targets_state = _StatePanel()
+        self.results_layout.addWidget(self.targets_state)
+
+        self.grid_host = QWidget()
+        self.grid_host.setObjectName("Plain")
+        self.grid = FlowLayout(self.grid_host, margin=0, spacing=theme.SPACE_3)
+        self.results_layout.addWidget(self.grid_host)
+
+        # A trailing stretch HERE, unlike in the sidebar, and for the same
+        # reason the sidebar must not have one. Wrapping labels understate
+        # their height, so this column is handed more room than it needs;
+        # with nothing to absorb it a box layout shares the surplus out
+        # between the heading and the panel below it, which shows as holes
+        # between two things that should be a few pixels apart. The sidebar
+        # cannot do this because its column IS the scrolled content and a
+        # stretch there swallows the height its panels need. Here the column
+        # is inside a page that scrolls as a whole, so the leftover has
+        # somewhere harmless to go.
+        self.results_layout.addStretch(1)
+
         self.body_layout.addWidget(self.results_area)
-        self.results_area.hide()
+        self._show_waiting_for_card()
 
         # Clean-up mode replaces the target grid rather than sharing it: it
         # answers a different question, in a different shape, and it is the
@@ -838,7 +987,10 @@ class MainWindow(QWidget):
             button.setChecked(key == mode)
 
         cleaning = mode == MODE_CLEAN
-        self.results_area.setVisible(not cleaning and bool(self.group_cards))
+        # Not "only when there are cards" any more: with no cards, step 2 is
+        # a panel that says what is missing and offers the way out of it,
+        # which is worth far more on screen than a black rectangle.
+        self.results_area.setVisible(not cleaning)
         self.cleanup_host.setVisible(cleaning)
         if cleaning:
             self._show_cleanup()
@@ -885,7 +1037,9 @@ class MainWindow(QWidget):
             }[mode]
             heading.title_label.setText(title)
             heading.hint_label.setText(hint)
-            heading.hint_label.setVisible(bool(hint))
+            # The hint describes the cards. With no cards on screen the
+            # state panel below is already saying more, and better.
+            heading.hint_label.setVisible(bool(hint) and bool(self.group_cards))
 
         for card in self.group_cards:
             card.set_mode(mode)
@@ -994,6 +1148,17 @@ class MainWindow(QWidget):
         )
         layout.setSpacing(theme.SPACE_3)
 
+        # WHAT IS OPEN, and only then what could be. These are two different
+        # facts and they used to share one label, so once a folder had been
+        # chosen by hand the card went on saying "No DWARF 3 drive spotted.
+        # Plug the card in and hit Rescan" over six sessions it had just
+        # read. Step 1 was lying about the thing step 1 is for.
+        self.source_summary = _label("", "Muted", wrap=True)
+        # Hidden rather than empty: an empty label still takes a line, and a
+        # blank line at the top of the first card looks like a bug.
+        self.source_summary.hide()
+        layout.addWidget(self.source_summary)
+
         self.drive_status = _label("Looking for DWARF 3 drives...", "Muted")
         layout.addWidget(self.drive_status)
 
@@ -1071,6 +1236,35 @@ class MainWindow(QWidget):
 
     # -- step 1: source --------------------------------------------------
 
+    def _card_name(self) -> str:
+        """What to call the thing that is open, in one or two words.
+
+        The scan root is usually the ``Astronomy`` folder inside the card, so
+        its own name says nothing -- every DWARF card in the world is called
+        Astronomy. The folder holding it is the one the user recognises: a
+        drive letter, or whatever they named the copy on their disk.
+        """
+        root = self.source_root
+        if root is None:
+            return "Card"
+        if root.name.lower() == "astronomy" and root.parent != root:
+            return root.parent.name or str(root.parent)
+        return root.name or str(root)
+
+    def _set_source_summary(self, text: str, colour: str = "") -> None:
+        """Say what is open right now, above everything about finding one."""
+        if not text:
+            self.source_summary.setText("")
+            self.source_summary.hide()
+            return
+        if colour:
+            self.source_summary.setTextFormat(Qt.TextFormat.RichText)
+            self.source_summary.setText(f'<span style="color:{colour};">{text}</span>')
+        else:
+            self.source_summary.setTextFormat(Qt.TextFormat.PlainText)
+            self.source_summary.setText(text)
+        self.source_summary.show()
+
     def _look_for_drives(self) -> None:
         self.drive_status.setText("Looking for DWARF 3 drives...")
         self._clear_layout(self.drive_row)
@@ -1081,9 +1275,15 @@ class MainWindow(QWidget):
     def _show_drives(self, candidates: list) -> None:
         self._clear_layout(self.drive_row)
         if not candidates:
+            # Two different sentences, because a card being open changes what
+            # the absence of a drive MEANS. With nothing open it is the thing
+            # blocking you; with a folder already read it is a footnote.
             self.drive_status.setText(
                 "No DWARF 3 drive spotted. Plug the card in and hit Rescan, "
                 "or choose the folder below."
+                if self.source_root is None
+                else "No DWARF 3 drive spotted — plug one in and hit Rescan "
+                "to switch to it."
             )
             return
 
@@ -1121,16 +1321,59 @@ class MainWindow(QWidget):
             return
         self._start_scan(root)
 
+    # -- what step 2 says when it has no cards ----------------------------
+
+    def _show_waiting_for_card(self) -> None:
+        self.grid_host.hide()
+        self.step2_heading.title_label.setText("Choose what to stack")
+        self.step2_heading.hint_label.setText("")
+        self.step2_heading.hint_label.hide()
+        self.targets_state.show_state(
+            "Your targets will appear here",
+            "Pick your DWARF 3 drive above and this fills with one card per "
+            "target — how many frames, how long you were on it, and which "
+            "darks matched. That is the only thing you have to do; the "
+            "sessions, the grouping and the darks are all found for you.",
+            "Nothing on the card is ever written to, moved or renamed.",
+            (("Choose folder...", self._choose_source, True),
+             ("Look for drives again", self._look_for_drives, False)),
+        )
+        self.results_area.setVisible(self._mode != MODE_CLEAN)
+
+    def _show_scanning(self, message: str = "") -> None:
+        self.grid_host.hide()
+        self.targets_state.show_state(
+            "Reading the card...",
+            message or "Opening one frame from each session to read what it "
+            "was actually shot at.",
+            "This reads the card only. It can be left to get on with it.",
+        )
+        self.results_area.setVisible(self._mode != MODE_CLEAN)
+
+    def _on_scan_progress(self, message: str) -> None:
+        """One progress line, in the two places somebody might be looking.
+
+        The status bar is a strip at the very bottom of a 880px window; the
+        panel is in the middle of the empty column the user is staring at.
+        Putting it only in the former is how a scan came to look like a
+        frozen window with a hint hidden at the foot of the screen.
+        """
+        self.status.setText(message)
+        if self.targets_state.isVisible():
+            self.targets_state.set_body(message)
+
     def _start_scan(self, root: Path) -> None:
         self.source_root = root
         self.source_field.setText(str(root))
+        self.source_field.setToolTip(str(root))
+        self._set_source_summary(f"Reading {self._card_name()}...")
         self.status.setText(f"Reading {root}...")
         self.progress.setRange(0, 0)   # indeterminate
         self.progress.show()
-        self.results_area.hide()
+        self._show_scanning()
 
         self.scan_worker = ScanWorker(root)
-        self.scan_worker.progressed.connect(self.status.setText)
+        self.scan_worker.progressed.connect(self._on_scan_progress)
         self.scan_worker.finished_ok.connect(self._on_scanned)
         self.scan_worker.failed.connect(self._on_scan_failed)
         self.scan_worker.start()
@@ -1138,7 +1381,23 @@ class MainWindow(QWidget):
     def _on_scan_failed(self, message: str) -> None:
         self.progress.hide()
         self.status.setText("Could not read that folder.")
+        self._set_source_summary("That folder could not be read.", theme.ERROR)
+        self.grid_host.hide()
+        self.targets_state.show_state(
+            "That folder could not be read",
+            "Windows would not let this app read it. If the card is in a "
+            "reader, try taking it out and putting it back; otherwise pick "
+            "the folder again.",
+            message,
+            (("Choose folder...", self._choose_source, True),
+             ("Try again", self._retry_scan, False)),
+        )
+        self.results_area.setVisible(self._mode != MODE_CLEAN)
         self._warn("Could not read that folder", message)
+
+    def _retry_scan(self) -> None:
+        if self.source_root is not None:
+            self._start_scan(self.source_root)
 
     # -- step 2: groups --------------------------------------------------
 
@@ -1146,11 +1405,12 @@ class MainWindow(QWidget):
         self.scan_result = result
         self.progress.hide()
 
-        # A rescan rebuilds the target grid and NOTHING ELSE. Steps 3 and 4
-        # live in the sidebar now and are deliberately left alone: swapping
-        # cards should not lose the output folder you picked, the extras you
-        # ticked, or the log of the stack you just ran.
-        self._clear_layout(self.results_layout)
+        # A rescan rebuilds the target GRID and nothing else. Steps 3 and 4
+        # live in the sidebar and are deliberately left alone: swapping cards
+        # should not lose the output folder you picked, the extras you
+        # ticked, or the log of the stack you just ran. The step heading and
+        # the state panel are left alone too -- they outlive every scan.
+        self._clear_layout(self.grid)
         self.group_cards.clear()
 
         groups = auto_group(
@@ -1173,31 +1433,32 @@ class MainWindow(QWidget):
             )
         self.status.setText(summary)
 
-        self.step2_heading = _step_heading(2, "Choose what to stack", "")
-        self.results_layout.addWidget(self.step2_heading)
-
         if not groups:
-            self.results_layout.addWidget(
-                _label(
-                    "No sessions found here. Point at the folder the DWARF "
-                    "writes to, or plug the card in and hit Rescan.",
-                    "Muted",
-                    wrap=True,
-                )
-            )
+            self._show_nothing_found(result)
+            return
 
-        # A reflowing grid rather than one card per row: the window decides
-        # how many fit across, so several targets can be compared at a glance.
-        grid_host = QWidget()
-        grid = FlowLayout(grid_host, margin=0, spacing=theme.SPACE_3)
+        # Step 1 states what it actually opened, rather than going on about
+        # drives it did not find.
+        darks = len(result.darks)
+        self._set_source_summary(
+            f"✓  {self._card_name()} — "
+            f"{total} session{'s' if total != 1 else ''} in {len(groups)} "
+            f"target group{'s' if len(groups) != 1 else ''}, "
+            f"{darks} dark set{'s' if darks != 1 else ''}.",
+            theme.OK,
+        )
+
+        self.targets_state.hide()
+        self.grid_host.show()
+        self.step2_heading.hint_label.setVisible(True)
+
         for group in groups:
             card = GroupCard(group)
             card.changed.connect(lambda c=card: self._regroup(c))
             card.build_requested.connect(self._start_build)
             card.grid_requested.connect(self._open_stack_grid)
             self.group_cards.append(card)
-            grid.addWidget(card)
-        self.results_layout.addWidget(grid_host)
+            self.grid.addWidget(card)
 
         # Only raise the framing question where there is a real trade.
         self.layers_card.show_framing(groups)
@@ -1207,6 +1468,69 @@ class MainWindow(QWidget):
         # into stacking.
         for card in self.group_cards:
             card.set_mode(self._mode)
+        self._set_mode(self._mode)
+        self.results_area.setVisible(self._mode != MODE_CLEAN)
+        if self._mode == MODE_CLEAN:
+            self._show_cleanup()
+
+    def _show_nothing_found(self, result: ScanResult) -> None:
+        """A card was read and held nothing stackable. SAY WHY.
+
+        There are three quite different reasons and they want three
+        different answers, so the panel works out which one it is looking at
+        rather than printing one sentence that covers none of them. Where
+        the scanner objected to something by name -- a session folder with
+        no light frames in it, a dark folder it could not read -- those
+        reasons are put on screen, because the README promises every refusal
+        names what disagreed and an empty screen is a refusal.
+        """
+        darks = len(result.darks)
+        skipped = result.skipped
+
+        if darks and not result.sessions:
+            title = "Darks, but nothing to use them on"
+            body = (
+                f"This card holds {darks} dark set"
+                f"{'s' if darks != 1 else ''} and no imaging sessions. Darks "
+                f"on their own cannot be stacked — point at the card that "
+                f"has the sessions on it, or shoot a target first."
+            )
+        elif skipped and not result.sessions:
+            title = "Nothing here could be read as a session"
+            body = (
+                "Folders were found, but none of them held light frames this "
+                "app recognises. A DWARF 3 writes its subs as .fits files "
+                "ending in the sensor temperature; its own live stack, its "
+                "previews and anything you have processed in place are all "
+                "skipped on purpose."
+            )
+        else:
+            title = "Nothing to stack on this card"
+            body = (
+                "No DWARF 3 imaging sessions were found here. Point at the "
+                "drive itself or at the Astronomy folder inside it — either "
+                "works — or plug the card in and look again."
+            )
+
+        detail = ""
+        if skipped:
+            shown = skipped[:4]
+            detail = "Skipped:  " + "   ·   ".join(shown)
+            if len(skipped) > len(shown):
+                detail += f"   ·   and {len(skipped) - len(shown)} more"
+
+        self._set_source_summary(
+            f"{self._card_name()} was read, and holds nothing to stack.",
+            theme.WARN,
+        )
+        self.grid_host.hide()
+        self.targets_state.show_state(
+            title,
+            body,
+            detail,
+            (("Choose folder...", self._choose_source, True),
+             ("Look for drives again", self._look_for_drives, False)),
+        )
         self.results_area.setVisible(self._mode != MODE_CLEAN)
         if self._mode == MODE_CLEAN:
             self._show_cleanup()
