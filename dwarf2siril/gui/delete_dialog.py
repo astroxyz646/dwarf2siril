@@ -68,7 +68,21 @@ class DeleteDialog(QDialog):
 
         self.setWindowTitle("Delete from your DWARF card")
         self.setMinimumWidth(520)
-        self.setStyleSheet(f"background: {theme.BG};")
+        # SCOPED TO THIS DIALOG, not to everything inside it.
+        #
+        # A stylesheet set on a widget applies to that widget AND all its
+        # descendants, and it OUTRANKS the application stylesheet for them.
+        # A bare `background: ...` therefore repainted every button, box and
+        # label in the dialog too -- which meant the filled Danger button in
+        # here lost its red and drew its near-black label straight onto the
+        # near-black ground. The most dangerous button in the app was
+        # invisible in exactly the two windows that own it, while the
+        # identical button in the main window looked right, because the main
+        # window never set a stylesheet of its own.
+        #
+        # A type selector still applies only where it matches, so the dialog
+        # gets its ground and its children go on being styled by theme.py.
+        self.setStyleSheet(f"QDialog {{ background: {theme.BG}; }}")
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(
@@ -124,6 +138,13 @@ class DeleteDialog(QDialog):
             listing.setReadOnly(True)
             listing.setPlainText("\n".join(request.detail))
             listing.setMaximumHeight(150)
+            # ONE LINE PER THING, scrolling sideways if it has to. A DWARF
+            # session folder name is 50-odd characters, and wrapped in a
+            # monospace box it broke across two lines mid-word -- so the list
+            # of what is about to be deleted permanently read as twice as
+            # many items as it contained, each of them mangled. Counting the
+            # rows is the first thing anyone does with this box.
+            listing.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
             # Styled in theme.py alongside the run panel's log, which is the
             # same thing: a padded, bordered box of monospace lines.
             listing.setObjectName("Listing")
@@ -164,7 +185,14 @@ class DeleteDialog(QDialog):
 
     def _sync_button(self) -> None:
         if self.confirm_tick is not None:
-            self.delete_button.setEnabled(self.confirm_tick.isChecked())
+            ready = self.confirm_tick.isChecked()
+            self.delete_button.setEnabled(ready)
+            # The extra gesture is deliberate, so the greyed button has to
+            # read as a step still to take rather than as one that has
+            # stopped working.
+            self.delete_button.setToolTip(
+                "" if ready else "Tick the box above first."
+            )
         else:
             self.delete_button.setEnabled(True)
 

@@ -71,7 +71,9 @@ class CleanupPanel(QWidget):
 
         self.tree = QTreeWidget()
         self.tree.setColumnCount(4)
-        self.tree.setHeaderLabels(["", "Size", "Advice", "What it is"])
+        # The first column is the one with the tick boxes in it, and it was
+        # the only column with no name at all.
+        self.tree.setHeaderLabels(["What goes", "Size", "Advice", "What it is"])
         self.tree.setRootIsDecorated(False)
         self.tree.setAlternatingRowColors(False)
         self.tree.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
@@ -132,6 +134,9 @@ class CleanupPanel(QWidget):
             item.setData(0, Qt.ItemDataRole.UserRole, id(entry))
             self._entries[id(entry)] = entry
             item.setToolTip(3, entry.reason)
+            # The names are long and the column truncates them. Whoever is
+            # about to delete something has to be able to read WHICH thing.
+            item.setToolTip(0, f"{entry.name}\n{entry.path}")
             self.tree.addTopLevelItem(item)
             # Colour the advice column, which is the column being scanned.
             from PySide6.QtGui import QBrush, QColor
@@ -171,9 +176,20 @@ class CleanupPanel(QWidget):
         chosen = self._selected_entries()
         self.delete_button.setEnabled(bool(chosen))
         if not chosen:
+            # Disabled, and saying why. On the one screen in the app where a
+            # mistake cannot be undone, a button that will not explain itself
+            # is the last thing anybody needs.
+            self.delete_button.setToolTip(
+                "Nothing is ticked. Tick what you want gone first — nothing "
+                "is ever ticked for you."
+            )
             self.selection_label.setText("Nothing selected.")
             self.selection_label.setStyleSheet(f"color: {theme.TEXT_MUTED};")
             return
+        self.delete_button.setToolTip(
+            f"You will be shown exactly what goes, and asked to confirm, "
+            f"before anything is removed."
+        )
 
         total = sum(entry.size for entry in chosen)
         after = self._result.free_bytes + total
@@ -284,7 +300,21 @@ class CleanupWindow(QDialog):
     def __init__(self, card_root: Path, sessions: list, parent=None) -> None:
         super().__init__(parent)
         self.setWindowTitle("Clean up your DWARF card")
-        self.setStyleSheet(f"background: {theme.BG};")
+        # SCOPED TO THIS DIALOG, not to everything inside it.
+        #
+        # A stylesheet set on a widget applies to that widget AND all its
+        # descendants, and it OUTRANKS the application stylesheet for them.
+        # A bare `background: ...` therefore repainted every button, box and
+        # label in the dialog too -- which meant the filled Danger button in
+        # here lost its red and drew its near-black label straight onto the
+        # near-black ground. The most dangerous button in the app was
+        # invisible in exactly the two windows that own it, while the
+        # identical button in the main window looked right, because the main
+        # window never set a stylesheet of its own.
+        #
+        # A type selector still applies only where it matches, so the dialog
+        # gets its ground and its children go on being styled by theme.py.
+        self.setStyleSheet(f"QDialog {{ background: {theme.BG}; }}")
         self.resize(920, 620)
 
         layout = QVBoxLayout(self)

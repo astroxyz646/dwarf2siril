@@ -40,7 +40,21 @@ class AlbumWindow(QDialog):
         self._pixmap: QPixmap | None = None
 
         self.setWindowTitle(f"{target} — your DWARF's own picture")
-        self.setStyleSheet(f"background: {theme.BG};")
+        # SCOPED TO THIS DIALOG, not to everything inside it.
+        #
+        # A stylesheet set on a widget applies to that widget AND all its
+        # descendants, and it OUTRANKS the application stylesheet for them.
+        # A bare `background: ...` therefore repainted every button, box and
+        # label in the dialog too -- which meant the filled Danger button in
+        # here lost its red and drew its near-black label straight onto the
+        # near-black ground. The most dangerous button in the app was
+        # invisible in exactly the two windows that own it, while the
+        # identical button in the main window looked right, because the main
+        # window never set a stylesheet of its own.
+        #
+        # A type selector still applies only where it matches, so the dialog
+        # gets its ground and its children go on being styled by theme.py.
+        self.setStyleSheet(f"QDialog {{ background: {theme.BG}; }}")
         self.setSizeGripEnabled(True)
 
         # Comfortably large, but never bigger than the screen it opens on.
