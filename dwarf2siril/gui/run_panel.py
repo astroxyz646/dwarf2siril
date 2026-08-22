@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QUrl, Signal
+from PySide6.QtCore import QElapsedTimer, Qt, QTimer, QUrl, Signal
 from PySide6.QtGui import QDesktopServices, QGuiApplication
 from PySide6.QtWidgets import (
     QFileDialog,
@@ -58,6 +58,13 @@ class RunPanel(QFrame):
     # column and can be scrolled off, and the one control you must be able
     # to reach in a hurry is the one that stops it.
     running = Signal(bool)
+    # Stage text, percent (-1 where there is no honest number), and whether
+    # that percent means anything. Emitted for the SAME reason as `running`:
+    # everything this panel shows about a run in progress -- the bar, the
+    # stage, the log -- lives inside a scrolling column, and on an 880px
+    # window it is all below the fold. Pressing Stack now in Siril looked
+    # like pressing a button that did nothing at all.
+    staged = Signal(str, int, bool)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -197,11 +204,16 @@ class RunPanel(QFrame):
 
         self.heading.setText(f"{stack_name} is ready")
         placed = "linked" if build_result.linked else "copied"
+        # THE FOLDER'S NAME, not its whole path. This panel lives in a 330px
+        # column, and a real Windows path wrapped into five unbroken lines
+        # that said nothing the last component does not. The full path is a
+        # hover away, and Open folder is a few pixels below.
         self.summary.setText(
             f"{build_result.lights_copied} light frames and "
             f"{build_result.darks_copied} dark frames {placed} into "
-            f"{build_result.output_dir}."
+            f"{build_result.output_dir.name}."
         )
+        self.summary.setToolTip(str(build_result.output_dir))
         self.command_field.setText(run_command(self.script_path, self.siril_path))
         self.log.clear()
         self.log.hide()
@@ -256,8 +268,22 @@ class RunPanel(QFrame):
         self.stop_button.show()
 
         self.busy.setRange(0, 0)
-        self.stage_line.setText("Starting Siril...")
+        self._stage_text = "Starting Siril..."
+        self.stage_line.setText(self._stage_text)
         self.stage_line.show()
+
+        # A CLOCK, because a stack is the one thing here that can run for
+        # half an hour. A bar that is sweeping and a stage name that has not
+        # changed for a while look exactly like a hung program; a number that
+        # is still counting says otherwise, and it is the only honest thing
+        # left to show while Siril is inside a step that reports nothing.
+        self._elapsed = QElapsedTimer()
+        self._elapsed.start()
+        self._clock = QTimer(self)
+        self._clock.setInterval(1000)
+        self._clock.timeout.connect(self._show_stage)
+        self._clock.start()
+        self.staged.emit("Starting Siril", -1, False)
 
         self.worker = SirilWorker(
             self.script_path,
@@ -298,13 +324,45 @@ class RunPanel(QFrame):
                 self.busy.setRange(0, 100)
             # Never backwards, even if a later stage reports a lower number.
             self.busy.setValue(max(self.busy.value(), percent))
-            self.stage_line.setText(f"{stage}  ·  {self.busy.value()}%")
+            self._stage_text = f"{stage}  ·  {self.busy.value()}%"
         else:
             self.busy.setRange(0, 0)
-            self.stage_line.setText(f"{stage}  ·  no progress to report on this step")
+            self._stage_text = f"{stage}  ·  no progress to report on this step"
+        self._show_stage()
         self.stage_line.show()
+        self.staged.emit(
+            stage, self.busy.value() if determinate else -1, determinate
+        )
+
+    def _took(self) -> str:
+        """How long the run took, for the line that says it finished.
+
+        Worth keeping: it is the number somebody needs to decide whether to
+        put the kettle on next time, and it is gone the moment the clock
+        stops if nothing writes it down.
+        """
+        elapsed = getattr(self, "_elapsed", None)
+        if elapsed is None:
+            return ""
+        seconds = elapsed.elapsed() // 1000
+        if seconds < 60:
+            return f" in {seconds}s"
+        return f" in {seconds // 60}m {seconds % 60:02d}s"
+
+    def _show_stage(self) -> None:
+        """The stage, and how long this has been going."""
+        text = getattr(self, "_stage_text", "")
+        elapsed = getattr(self, "_elapsed", None)
+        if elapsed is not None:
+            seconds = elapsed.elapsed() // 1000
+            clock = f"{seconds // 60}:{seconds % 60:02d}"
+            text = f"{text}  ·  {clock}" if text else clock
+        self.stage_line.setText(text)
 
     def _end_run(self) -> None:
+        clock = getattr(self, "_clock", None)
+        if clock is not None:
+            clock.stop()
         self.running.emit(False)
         self.busy.hide()
         self.stage_line.hide()
@@ -329,6 +387,7 @@ class RunPanel(QFrame):
 
         if result.ok:
             where = result.output_image or self.result_image
+            took = self._took()
             # A preview that could not be written is worth a sentence, not a
             # failure: the stack is the deliverable and it is on disk.
             note = "".join(
@@ -338,7 +397,8 @@ class RunPanel(QFrame):
             self.verdict.setText(
                 f'<span style="color:{theme.OK};font-weight:600;">Stacked.</span> '
                 f'<span style="color:{theme.TEXT_MUTED};">Siril finished and '
-                f'wrote {where.name if where else self.stack_name + ".fit"}.</span>'
+                f'wrote {where.name if where else self.stack_name + ".fit"}'
+                f'{took}.</span>'
                 + note
             )
             if result.output_image is not None:
@@ -349,6 +409,12 @@ class RunPanel(QFrame):
         detail = result.error_lines[0] if result.error_lines else (
             f"Siril exited with code {result.exit_code}."
         )
+        # The log pane strips Siril's "log: " prefix; the one line we promote
+        # into the verdict has to be stripped too, or the sentence somebody
+        # is meant to READ starts with a piece of another program's plumbing.
+        if detail.startswith("log: "):
+            detail = detail[5:]
+        detail = detail[:1].upper() + detail[1:] if detail else detail
         self.verdict.setText(
             f'<span style="color:{theme.ERROR};font-weight:600;">Siril did not '
             f'finish.</span> '
@@ -373,6 +439,11 @@ class RunPanel(QFrame):
     def _copy_command(self) -> None:
         QGuiApplication.clipboard().setText(self.command_field.text())
         self.copy_button.setText("Copied")
+        # And then back to Copy. It said "Copied" for the rest of the
+        # session, which turns a confirmation into a label: come back ten
+        # minutes later and the button claims something is on the clipboard
+        # that may well have been replaced five times since.
+        QTimer.singleShot(1600, lambda: self.copy_button.setText("Copy"))
 
     def _open_folder(self) -> None:
         if self.output_dir is not None:

@@ -530,6 +530,23 @@ class GroupCard(QFrame):
         self.grid_button.style().unpolish(self.grid_button)
         self.grid_button.style().polish(self.grid_button)
 
+    def set_prepared(self, folder_name: str) -> None:
+        """Mark this card as the one that has been built, and where to.
+
+        Prepare hands the job over to a panel on the other side of the
+        window, and five identical cards with five identical buttons gave no
+        clue which of them step 4 was about -- you had to read the project
+        name in the sidebar and match it back yourself. The card that did it
+        now says so, and its button stops pretending nothing has happened.
+        """
+        self._prepared = folder_name
+        self.build_button.setText("Prepare again")
+        self.build_button.setToolTip(
+            f"Already built into {folder_name}. Building again replaces what "
+            f"is in there."
+        )
+        self.refresh()
+
     def set_busy(self, busy: bool) -> None:
         self._busy = busy
         self.build_button.setText("Working..." if busy else "Prepare")
@@ -545,8 +562,11 @@ class GroupCard(QFrame):
         already using on its face.
         """
         busy = getattr(self, "_busy", False)
+        prepared = getattr(self, "_prepared", "")
         buildable = self.group.is_buildable
         self.build_button.setEnabled(not busy and buildable)
+        if not busy:
+            self.build_button.setText("Prepare again" if prepared else "Prepare")
 
         if busy:
             self.build_button.setToolTip(
@@ -559,6 +579,11 @@ class GroupCard(QFrame):
                 "These sessions cannot go in one stack:\n" + reasons
                 if reasons
                 else "There is nothing in this group to stack."
+            )
+        elif prepared:
+            self.build_button.setToolTip(
+                f"Already built into {prepared}. Building again replaces what "
+                f"is in there."
             )
         else:
             self.build_button.setToolTip(
@@ -594,6 +619,12 @@ class GroupCard(QFrame):
         if group.errors:
             self.status_pill.setText(theme.pill("CAN'T STACK", theme.ERROR))
             self.setObjectName("CardBad")
+        elif getattr(self, "_prepared", ""):
+            # Says something happened, rather than the same READY as the four
+            # cards nothing has happened to.
+            self.status_pill.setText(theme.pill("PREPARED", theme.OK))
+            self.status_pill.setToolTip(f"Built into {self._prepared}.")
+            self.setObjectName("CardSelected")
         elif group.warnings:
             self.status_pill.setText(theme.pill("READY", theme.WARN))
             self.setObjectName("CardSelected")

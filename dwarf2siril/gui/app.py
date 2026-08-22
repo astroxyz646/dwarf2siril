@@ -883,6 +883,7 @@ class MainWindow(QWidget):
         self.run_panel = RunPanel()
         self.run_panel.finished.connect(self._on_stack_finished)
         self.run_panel.running.connect(self._on_stack_running)
+        self.run_panel.staged.connect(self._on_stack_staged)
         self.run_panel.hide()
         self.sidebar_layout.addWidget(self.run_panel)
 
@@ -1794,6 +1795,10 @@ class MainWindow(QWidget):
         destination = self.output_dir / group.suggested_name()
         self._last_stack_name = group.suggested_name()
         self._last_group = group
+        # Which card asked, so the finished build can mark it. Step 4 lives
+        # on the other side of the window from the grid, and five identical
+        # cards give no clue which of them it is about.
+        self._building_card = card
 
         for other in self.group_cards:
             other.set_busy(True)
@@ -1850,6 +1855,29 @@ class MainWindow(QWidget):
         into a failure, so this only ever adds a panel -- it cannot take the
         success away.
         """
+        # SAY IT WHERE IT CANNOT BE SCROLLED AWAY FROM. The panel's own
+        # verdict is at the bottom of a scrolling column, under a log; on a
+        # narrow window somebody who pressed Stack and looked away comes back
+        # to a screen that still says "Built 76 lights and 20 darks". The
+        # status bar is the one strip that is always on screen.
+        self.status.setText(
+            f"Stacked {self._last_stack_name}."
+            if ok
+            else f"Siril did not finish {self._last_stack_name} — "
+            f"the log in step 4 says why."
+        )
+        if ok:
+            self.open_button.show()
+
+        # And put the verdict in view, since that is where the detail is.
+        if self.run_panel is not None and self.sidebar.isVisible():
+            QTimer.singleShot(
+                60,
+                lambda: self.sidebar_scroll.ensureWidgetVisible(
+                    self.run_panel.verdict
+                ),
+            )
+
         if ok:
             self._remember_stack()
         if not ok or self.preview_panel is None or self._last_output_dir is None:
@@ -1892,6 +1920,10 @@ class MainWindow(QWidget):
 
         self._last_output_dir = result.output_dir
 
+        card = getattr(self, "_building_card", None)
+        if card is not None and card in self.group_cards:
+            card.set_prepared(result.output_dir.name)
+
         # Step 4 is in the sidebar rather than a dialog: the user is about to
         # watch a stack that can run a long time, and a modal box is the
         # wrong shape for something you sit and watch.
@@ -1925,17 +1957,53 @@ class MainWindow(QWidget):
         self.status.setText(f"Stopped. {message}")
 
     def _on_stack_running(self, running: bool) -> None:
-        """Put Stop in the status bar for as long as Siril is going.
+        """Put Stop AND the progress in the status bar while Siril is going.
 
         The run panel's own Stop lives inside the scrolling sidebar and can
         be scrolled out of sight. Stop is the one control somebody needs to
         reach in a hurry, so while a stack is running there is always one on
         screen, outside any scroll area, whatever mode you are in.
+
+        The same is true of everything else the run shows. The bar, the stage
+        name and the log are all inside that column, and on an 880px window
+        they are all below the fold the moment the panel grows them --
+        pressing Stack now in Siril looked exactly like pressing a button
+        that did nothing. So the footer mirrors the run: a bar and a line,
+        both outside every scroll area, for as long as it lasts. The sidebar
+        is also scrolled down to the panel, so the detail is one glance away
+        rather than one hunt away.
         """
         self._stack_running = running
         self.cancel_button.setText("Stop stacking" if running else "Stop")
         self.cancel_button.setVisible(running)
         self.cancel_button.setEnabled(True)
+
+        if running:
+            self.progress.setRange(0, 0)
+            self.progress.show()
+            self.status.setText("Starting Siril...")
+            self.open_button.hide()
+            QTimer.singleShot(
+                60,
+                lambda: self.sidebar_scroll.ensureWidgetVisible(self.run_panel.busy)
+                if self.sidebar.isVisible()
+                else None,
+            )
+        else:
+            self.progress.hide()
+
+    def _on_stack_staged(self, stage: str, percent: int, determinate: bool) -> None:
+        """Mirror the run panel's progress into the always-visible footer."""
+        if not getattr(self, "_stack_running", False):
+            return
+        if determinate and percent >= 0:
+            if self.progress.maximum() == 0:
+                self.progress.setRange(0, 100)
+            self.progress.setValue(max(self.progress.value(), percent))
+            self.status.setText(f"Stacking — {stage}  ·  {self.progress.value()}%")
+        else:
+            self.progress.setRange(0, 0)
+            self.status.setText(f"Stacking — {stage}")
 
     def _cancel_build(self) -> None:
         # One button, two jobs, and it must stop the one that is actually
