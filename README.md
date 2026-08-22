@@ -33,6 +33,8 @@ Several nights of the same target, combined into one stack — automatically.
 - **Bad frames dropped automatically.** Cloud, wind and poor seeing, measured
   against the session's own median rather than a fixed number.
 - **Your card is only ever read.** Nothing is moved, renamed or deleted on it.
+- **Five colour schemes, switched live** — including a red-on-black one for
+  keeping your dark adaptation at the eyepiece, and a light one for indoors.
 - **EQ *and* alt-az.** Both stack. EQ is the better way to shoot and the app
   says so, but an alt-az session is not a write-off.
 - **It explains itself.** Every refusal names the field that disagreed; every
@@ -148,6 +150,28 @@ all: stretch has no step of its own because it runs last and what it produced
 outright on frames the wide camera recorded no pointing for. A layer that went
 missing for no reason anyone can name still gets a line saying so, because
 that is worth more than an empty space.
+
+**The window's colours.** The picker sits in the top bar, to the left of the
+mode switcher. Changing it repaints everything at once — no restart, nothing
+lost — and it remembers what you chose for next time.
+
+**Deep Space** is the default: near-black with a deep blue accent, which is the
+app as it has always looked.
+
+**Red Night** is the one that is more than a coat of paint. Short-wavelength
+light costs you more dark adaptation than anything else, which is why torches
+at a telescope are red, and this palette has no blue in it anywhere. If you are
+running the app on a laptop next to the mount, use it — and turn the screen
+brightness down as well, which does more than any palette can.
+
+**Daylight** is the opposite case: a light scheme for sitting at a desk in the
+afternoon going through last night's frames. Note that the ground behind a
+photograph stays dark even here. That is deliberate — your subs are almost
+entirely near-black, and a white surround around one both glares and hides the
+faint detail you are trying to judge.
+
+**Nebula** (plum and magenta) and **Mars** (warm browns and ochre) are there
+because the window does not have to be blue.
 
 ### The command line
 

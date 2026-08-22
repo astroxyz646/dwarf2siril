@@ -60,7 +60,13 @@ class AlbumWindow(QDialog):
 
         self.view = QLabel("Opening the picture...")
         self.view.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.view.setObjectName("Muted")
+        # The same mount the frame viewer uses, and for the same reason: this
+        # is a photograph at full size, and BG_SUNKEN is the one surface that
+        # stays dark on every palette so the picture is not competing with
+        # its own surround. On a dark palette this is a shade below the
+        # dialog; on Daylight it is the difference between a framed print and
+        # a bright page with a black hole in it.
+        self.view.setObjectName("Sunken")
         self.view.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
         )
