@@ -35,6 +35,7 @@ from PySide6.QtCore import QUrl
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
+    QComboBox,
     QFileDialog,
     QFrame,
     QHBoxLayout,
@@ -51,6 +52,7 @@ from PySide6.QtWidgets import (
 
 from ..cardinfo import remember_stacked
 from ..grouping import auto_group, build_group
+from ..postprocess import load_settings, save_setting
 from ..scanner import ScanResult, find_astronomy_root
 from . import theme
 from .cards import CARD_WIDTH, DriveTile, GroupCard
@@ -60,7 +62,6 @@ from .flow import FlowLayout
 from .layers import LayersCard
 from .preview import PreviewPanel
 from .run_panel import RunPanel
-from .windows_theme import apply_dark_titlebar
 from .workers import BuildWorker, DriveScanner, ScanWorker
 
 
@@ -494,6 +495,7 @@ class MainWindow(QWidget):
         self._frame_verdicts: dict[str, str] = {}
 
         self._build_ui()
+        theme.follow(self)
         QTimer.singleShot(150, self._look_for_drives)
 
     def showEvent(self, event) -> None:  # noqa: N802 - Qt naming
@@ -504,12 +506,7 @@ class MainWindow(QWidget):
         the window being hidden and shown again.
         """
         super().showEvent(event)
-        apply_dark_titlebar(
-            self.winId(),
-            caption=theme.SURFACE,
-            text=theme.TEXT,
-            border=theme.BORDER,
-        )
+        theme.apply_titlebar(self)
 
     # -- layout ----------------------------------------------------------
 
@@ -929,8 +926,44 @@ class MainWindow(QWidget):
         )
         layout.addLayout(titles)
         layout.addStretch(1)
+        # Left of the mode bar, and quieter than it. Which lens you are in
+        # changes what the app DOES; which palette you are in changes only
+        # how it looks, so it must not compete for the same glance.
+        layout.addWidget(self._theme_picker(), 0, Qt.AlignmentFlag.AlignVCenter)
         layout.addWidget(self._mode_bar(), 0, Qt.AlignmentFlag.AlignVCenter)
         return holder
+
+    def _theme_picker(self) -> QWidget:
+        picker = QComboBox()
+        picker.setObjectName("ThemePicker")
+        picker.setCursor(Qt.CursorShape.PointingHandCursor)
+        picker.setToolTip(
+            "The window's colours. Red Night keeps your dark adaptation at "
+            "the eyepiece; Daylight is for working indoors."
+        )
+        picker.addItems(theme.names())
+        picker.setCurrentText(theme.active().name)
+        picker.currentTextChanged.connect(self._choose_theme)
+        self.theme_picker = picker
+        return picker
+
+    def _choose_theme(self, name: str) -> None:
+        """Switch palette, and remember it for next time.
+
+        The saved name is whatever the picker offered, so it always resolves;
+        a settings file naming a palette this build does not have falls back
+        to the default rather than refusing to start. See theme.resolve.
+        """
+        theme.apply(QApplication.instance(), name)
+        save_setting(theme.SETTING_KEY, name)
+
+    def restyle(self) -> None:
+        """Repaint what the global sheet cannot reach: the native title bar.
+
+        Everything else in this window takes its colours from an object name
+        and has already been repolished by the time this runs.
+        """
+        theme.apply_titlebar(self)
 
     def _mode_bar(self) -> QWidget:
         bar = QFrame()
@@ -1572,6 +1605,10 @@ def main() -> int:
     app = QApplication(sys.argv)
     app.setApplicationName("Dwarf2Siril")
     app.setStyle("Fusion")
+    # The palette BEFORE the sheet, and both before the window: a widget
+    # built under the wrong palette would bake the wrong colours into the
+    # handful of places that cannot be restyled by a sheet alone.
+    theme.set_palette(load_settings().get(theme.SETTING_KEY))
     app.setStyleSheet(theme.stylesheet())
 
     icon = application_icon()

@@ -60,14 +60,19 @@ def _windows_build() -> int:
         return 0
 
 
-def apply_dark_titlebar(
-    window_id, caption: str, text: str, border: str
+def apply_titlebar(
+    window_id, caption: str, text: str, border: str, dark: bool = True
 ) -> bool:
     """Colour one window's native title bar. True if Windows accepted it.
 
     ``window_id`` is whatever ``QWidget.winId()`` returned. Call it after the
     window has been shown, because the native handle does not exist before
     then.
+
+    ``dark`` is the app's own palette telling Windows which way round the
+    caption is. It used to be hard-coded on, which was right while there was
+    only ever a dark theme; on the light palette it makes Windows draw light
+    caption text on our light caption, and the buttons vanish.
     """
     if sys.platform != "win32":
         return False
@@ -100,8 +105,12 @@ def apply_dark_titlebar(
 
         # Dark mode first. On its own this already gives a dark caption and
         # light caption text, so it is the part that matters most and the
-        # only part Windows 10 (2004+) will honour.
-        set_attribute(DWMWA_USE_IMMERSIVE_DARK_MODE, ctypes.c_int(1))
+        # only part Windows 10 (2004+) will honour. It is also the ONLY
+        # signal a light palette has on Windows 10, where the explicit
+        # caption colours below are refused.
+        set_attribute(
+            DWMWA_USE_IMMERSIVE_DARK_MODE, ctypes.c_int(1 if dark else 0)
+        )
 
         if _windows_build() < MIN_BUILD_FOR_CAPTION_COLOUR:
             return False

@@ -28,7 +28,6 @@ from PySide6.QtWidgets import (
 
 from . import theme
 from .thumbnails import load_async
-from .windows_theme import apply_dark_titlebar
 
 
 class AlbumWindow(QDialog):
@@ -40,7 +39,9 @@ class AlbumWindow(QDialog):
         self._pixmap: QPixmap | None = None
 
         self.setWindowTitle(f"{target} — your DWARF's own picture")
-        self.setStyleSheet(f"background: {theme.BG};")
+        # Styled in theme.py rather than here: an inline sheet is set once at
+        # construction and a palette switch cannot reach it.
+        self.setObjectName("Sheet")
         self.setSizeGripEnabled(True)
 
         # Comfortably large, but never bigger than the screen it opens on.
@@ -59,7 +60,7 @@ class AlbumWindow(QDialog):
 
         self.view = QLabel("Opening the picture...")
         self.view.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.view.setStyleSheet(f"color: {theme.TEXT_MUTED};")
+        self.view.setObjectName("Muted")
         self.view.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
         )
@@ -86,18 +87,18 @@ class AlbumWindow(QDialog):
         # Decoded on a worker thread: 3840x2160 is not something to open on
         # the UI thread, however briefly.
         load_async(path, self._on_loaded, width=0)
+        theme.follow(self)
 
     def showEvent(self, event) -> None:  # noqa: N802 - Qt naming
         # Dialogs get their own native frame, so they need the same treatment
-        # as the main window or this one window turns up in default light
-        # grey next to everything else.
+        # as the main window or this one window turns up in the platform's
+        # default colours next to everything else.
         super().showEvent(event)
-        apply_dark_titlebar(
-            self.winId(),
-            caption=theme.SURFACE,
-            text=theme.TEXT,
-            border=theme.BORDER,
-        )
+        theme.apply_titlebar(self)
+
+    def restyle(self) -> None:
+        """Only the title bar. Everything else here is object-named."""
+        theme.apply_titlebar(self)
 
     def _on_loaded(self, image) -> None:
         if image is None:

@@ -76,13 +76,26 @@ class LayerRow(QWidget):
         self.warning = _label("", "Faint")
         self.warning.setContentsMargins(theme.SPACE_6, 0, 0, 0)
         self.warning.setTextFormat(Qt.TextFormat.RichText)
-        if warning:
-            self.warning.setText(
-                f'<span style="color:{theme.WARN};">{warning}</span>'
-            )
-        else:
-            self.warning.hide()
+        # The colour of this line IS its meaning, and it is a span inside a
+        # label that also has to stay at the Faint size -- so the state is
+        # kept rather than the markup, and re-rendered when the palette
+        # changes. See restyle.
+        self._note = (warning, "WARN") if warning else ("", "")
+        self._render_note()
         layout.addWidget(self.warning)
+        theme.follow(self)
+
+    def _render_note(self) -> None:
+        message, kind = self._note
+        if not message:
+            self.warning.hide()
+            return
+        colour = getattr(theme, kind)
+        self.warning.setText(f'<span style="color:{colour};">{message}</span>')
+        self.warning.show()
+
+    def restyle(self) -> None:
+        self._render_note()
 
     @property
     def checked(self) -> bool:
@@ -91,14 +104,14 @@ class LayerRow(QWidget):
     def set_unavailable(self, message: str) -> None:
         self.checkbox.setChecked(False)
         self.checkbox.setEnabled(False)
-        self.warning.setText(f'<span style="color:{theme.ERROR};">{message}</span>')
-        self.warning.show()
+        self._note = (message, "ERROR")
+        self._render_note()
 
     def set_available(self, message: str = "") -> None:
         self.checkbox.setEnabled(True)
         if message:
-            self.warning.setText(f'<span style="color:{theme.OK};">{message}</span>')
-            self.warning.show()
+            self._note = (message, "OK")
+            self._render_note()
 
 
 class LayersCard(QFrame):

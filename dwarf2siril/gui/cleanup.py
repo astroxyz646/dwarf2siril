@@ -32,14 +32,20 @@ from ..cardinfo import KEEP, STACKED, SYSTEM, YOURS, CardEntry, survey
 from ..deletion import delete, describe_size
 from . import theme
 from .delete_dialog import DeleteRequest, confirm_delete
-from .windows_theme import apply_dark_titlebar
 
-ADVICE_COLOUR = {
-    "Safe to remove": theme.OK,
-    "Already stacked": theme.OK,
-    "Keep": theme.WARN,
-    "Yours": theme.TEXT_MUTED,
-}
+def advice_colour(advice: str) -> str:
+    """What colour a row's advice column is written in.
+
+    A function rather than the module-level dict this used to be: a dict is
+    built once at import and would still be holding the palette the app
+    started in long after somebody switched away from it.
+    """
+    return {
+        "Safe to remove": theme.OK,
+        "Already stacked": theme.OK,
+        "Keep": theme.WARN,
+        "Yours": theme.TEXT_MUTED,
+    }.get(advice, theme.TEXT_MUTED)
 
 
 class CleanupPanel(QWidget):
@@ -56,6 +62,7 @@ class CleanupPanel(QWidget):
         super().__init__(parent)
         self._card_root = Path(card_root)
         self._sessions = sessions
+        theme.follow(self)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -125,20 +132,11 @@ class CleanupPanel(QWidget):
             item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
             item.setCheckState(0, Qt.CheckState.Unchecked)  # never preselected
             item.setText(0, entry.name)
-            item.setForeground(
-                2, Qt.GlobalColor.white
-            )
-            colour = ADVICE_COLOUR.get(entry.advice, theme.TEXT_MUTED)
             item.setData(0, Qt.ItemDataRole.UserRole, id(entry))
             self._entries[id(entry)] = entry
             item.setToolTip(3, entry.reason)
             self.tree.addTopLevelItem(item)
-            # Colour the advice column, which is the column being scanned.
-            from PySide6.QtGui import QBrush, QColor
-
-            item.setForeground(2, QBrush(QColor(colour)))
-            if entry.size == 0:
-                item.setForeground(1, QBrush(QColor(theme.TEXT_FAINT)))
+            self._colour_row(item, entry)
 
         header = self.tree.header()
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
@@ -154,6 +152,37 @@ class CleanupPanel(QWidget):
             f"Listed below: {describe_size(result.total_bytes)}."
         )
         self._result = result
+        self._on_tick()
+
+    def _colour_row(self, item: QTreeWidgetItem, entry: CardEntry) -> None:
+        """Paint one row's advice and size in the active palette.
+
+        A QBrush on a tree item is the one kind of colour in this window
+        that a style sheet genuinely cannot reach, so it is set here and set
+        again from restyle rather than left behind by a switch.
+        """
+        from PySide6.QtGui import QBrush, QColor
+
+        # The advice column is the one being scanned, so it is the one that
+        # carries the colour.
+        item.setForeground(2, QBrush(QColor(advice_colour(entry.advice))))
+        item.setForeground(
+            1,
+            QBrush(QColor(theme.TEXT_FAINT if entry.size == 0 else theme.TEXT)),
+        )
+
+    def restyle(self) -> None:
+        """Repaint the tree's brushes and the selection line.
+
+        The rest of this panel is object-named and has already been done by
+        the global sheet. Re-running the survey to get here would walk the
+        card again, which a colour change has no business doing.
+        """
+        for index in range(self.tree.topLevelItemCount()):
+            item = self.tree.topLevelItem(index)
+            entry = self._entries.get(item.data(0, Qt.ItemDataRole.UserRole))
+            if entry is not None:
+                self._colour_row(item, entry)
         self._on_tick()
 
     def _selected_entries(self) -> list[CardEntry]:
@@ -172,7 +201,7 @@ class CleanupPanel(QWidget):
         self.delete_button.setEnabled(bool(chosen))
         if not chosen:
             self.selection_label.setText("Nothing selected.")
-            self.selection_label.setStyleSheet(f"color: {theme.TEXT_MUTED};")
+            theme.repolish(self.selection_label, "Muted")
             return
 
         total = sum(entry.size for entry in chosen)
@@ -188,9 +217,9 @@ class CleanupPanel(QWidget):
                 f"({', '.join(e.name for e in keepers)}) — you would have to "
                 f"shoot them again."
             )
-            self.selection_label.setStyleSheet(f"color: {theme.WARN};")
+            theme.repolish(self.selection_label, "Warn")
         else:
-            self.selection_label.setStyleSheet(f"color: {theme.TEXT};")
+            theme.repolish(self.selection_label, "")
         self.selection_label.setText(message)
 
     # -- deleting --------------------------------------------------------
@@ -284,7 +313,7 @@ class CleanupWindow(QDialog):
     def __init__(self, card_root: Path, sessions: list, parent=None) -> None:
         super().__init__(parent)
         self.setWindowTitle("Clean up your DWARF card")
-        self.setStyleSheet(f"background: {theme.BG};")
+        self.setObjectName("Sheet")
         self.resize(920, 620)
 
         layout = QVBoxLayout(self)
@@ -293,6 +322,7 @@ class CleanupWindow(QDialog):
         )
         layout.setSpacing(theme.SPACE_3)
 
+        theme.follow(self)
         self.panel = CleanupPanel(card_root, sessions, self)
         self.panel.changed.connect(self.changed.emit)
         layout.addWidget(self.panel, 1)
@@ -307,4 +337,7 @@ class CleanupWindow(QDialog):
 
     def showEvent(self, event) -> None:  # noqa: N802 - Qt naming
         super().showEvent(event)
-        apply_dark_titlebar(self.winId(), theme.SURFACE, theme.TEXT, theme.BORDER)
+        theme.apply_titlebar(self)
+
+    def restyle(self) -> None:
+        theme.apply_titlebar(self)

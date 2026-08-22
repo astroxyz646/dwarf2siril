@@ -104,6 +104,11 @@ class SwipeView(QWidget):
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.setMouseTracking(True)
         self.setCursor(Qt.CursorShape.SplitHCursor)
+        theme.follow(self)
+
+    def restyle(self) -> None:
+        """A custom paint reads its tokens as it draws, so this only asks."""
+        self.update()
 
     def set_images(
         self, before: QPixmap, after: QPixmap, before_label: str, after_label: str
@@ -130,7 +135,9 @@ class SwipeView(QWidget):
 
         rect = self._target_rect()
         if rect.isEmpty():
-            painter.setPen(QColor(theme.TEXT_FAINT))
+            # SUNKEN_TEXT, not TEXT_FAINT: this sits on BG_SUNKEN, which
+            # stays dark even on the light palette. See the token.
+            painter.setPen(QColor(theme.SUNKEN_TEXT))
             painter.drawText(
                 self.rect(), Qt.AlignmentFlag.AlignCenter, "No preview available"
             )
@@ -179,7 +186,10 @@ class SwipeView(QWidget):
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(QColor(0, 0, 0, 190))
         painter.drawRoundedRect(QRect(x, y, width, height), 13, 13)
-        painter.setPen(QColor(theme.TEXT))
+        # The tag has its OWN black scrim, so the palette's TEXT is wrong
+        # here on Daylight -- near-black on near-black. This is the bright
+        # end of the sunken pair for the same reason the mount is dark.
+        painter.setPen(QColor(theme.SUNKEN_TEXT_BRIGHT))
         painter.drawText(
             QRect(x, y, width, height), Qt.AlignmentFlag.AlignCenter, text
         )
@@ -250,6 +260,7 @@ class PreviewPanel(QFrame):
         # stages happen to be selected, whereas the finding is about the pair
         # currently being compared and changes with the dropdowns.
         self.missing = QLabel("")
+        self.missing.setObjectName("Muted")
         self.missing.setWordWrap(True)
         self.missing.setTextFormat(Qt.TextFormat.RichText)
         self.missing.hide()
@@ -260,6 +271,7 @@ class PreviewPanel(QFrame):
         # nothing MUST say it shows nothing -- otherwise the honest
         # conclusion for the user is that the feature is broken.
         self.finding = QLabel("")
+        self.finding.setObjectName("Muted")
         self.finding.setWordWrap(True)
         self.finding.setTextFormat(Qt.TextFormat.RichText)
         self.finding.hide()
@@ -395,9 +407,7 @@ class PreviewPanel(QFrame):
         if not notes:
             return
 
-        self.missing.setText(
-            f'<span style="color:{theme.TEXT_MUTED};">' + "<br>".join(notes) + "</span>"
-        )
+        self.missing.setText("<br>".join(notes))
         self.missing.show()
 
     @staticmethod
@@ -484,11 +494,7 @@ class PreviewPanel(QFrame):
             notes.append(self.solved_note)
 
         if notes:
-            self.finding.setText(
-                f'<span style="color:{theme.TEXT_MUTED};">'
-                + " ".join(notes)
-                + "</span>"
-            )
+            self.finding.setText(" ".join(notes))
             self.finding.show()
         else:
             self.finding.hide()

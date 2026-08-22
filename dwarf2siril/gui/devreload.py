@@ -112,11 +112,18 @@ class DevReloader:
 
     def _restyle(self) -> None:
         try:
+            from ..postprocess import load_settings
             from . import theme
 
             importlib.reload(theme)
-            self._app.setStyleSheet(theme.stylesheet())
-            print("[dev] theme reloaded")
+            # A reload puts the module back on its default palette, so the
+            # chosen one has to be re-applied or an edit would silently
+            # throw the developer back to Deep Space. apply also emits, so
+            # the widgets that restyle themselves come along too.
+            theme.apply(
+                self._app, load_settings().get(theme.SETTING_KEY)
+            )
+            print(f"[dev] theme reloaded ({theme.active().name})")
         except Exception as exc:  # noqa: BLE001 - a bad edit must not kill the app
             print(f"[dev] theme reload failed, app left as it was: {exc}")
 

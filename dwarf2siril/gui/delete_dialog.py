@@ -35,7 +35,6 @@ from PySide6.QtWidgets import (
 
 from ..deletion import describe_size, recycle_bin_available
 from . import theme
-from .windows_theme import apply_dark_titlebar
 
 
 @dataclass
@@ -66,9 +65,10 @@ class DeleteDialog(QDialog):
         self._request = request
         self.recycles = recycle_bin_available(request.paths[0]) if request.paths else False
 
+        theme.follow(self)
         self.setWindowTitle("Delete from your DWARF card")
         self.setMinimumWidth(520)
-        self.setStyleSheet(f"background: {theme.BG};")
+        self.setObjectName("Sheet")
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(
@@ -103,19 +103,19 @@ class DeleteDialog(QDialog):
                 "They go to the Windows Recycle Bin, so you can get them "
                 "back if you change your mind."
             )
-            destination.setStyleSheet(f"color: {theme.OK};")
+            destination.setObjectName("Ok")
         else:
             destination = QLabel(
                 "This card has no Recycle Bin, so they will be deleted "
                 "PERMANENTLY and cannot be recovered."
             )
-            destination.setStyleSheet(f"color: {theme.ERROR}; font-weight: 600;")
+            destination.setObjectName("Error")
         destination.setWordWrap(True)
         layout.addWidget(destination)
 
         for warning in request.warnings or []:
             label = QLabel(warning)
-            label.setStyleSheet(f"color: {theme.WARN};")
+            label.setObjectName("Warn")
             label.setWordWrap(True)
             layout.addWidget(label)
 
@@ -137,7 +137,9 @@ class DeleteDialog(QDialog):
                 f"Yes, delete {request.what}"
                 + (" permanently" if not self.recycles else "")
             )
-            self.confirm_tick.setStyleSheet(f"color: {theme.TEXT};")
+            # Plain TEXT is already the default for a check box, so this
+            # needs no rule of its own -- it only ever had one because the
+            # colour was being set inline.
             self.confirm_tick.stateChanged.connect(self._sync_button)
             layout.addWidget(self.confirm_tick)
 
@@ -170,9 +172,10 @@ class DeleteDialog(QDialog):
 
     def showEvent(self, event) -> None:  # noqa: N802 - Qt naming
         super().showEvent(event)
-        apply_dark_titlebar(
-            self.winId(), theme.SURFACE, theme.TEXT, theme.BORDER
-        )
+        theme.apply_titlebar(self)
+
+    def restyle(self) -> None:
+        theme.apply_titlebar(self)
 
 
 def confirm_delete(request: DeleteRequest, parent=None) -> bool:

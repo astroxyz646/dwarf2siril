@@ -69,6 +69,11 @@ class RunPanel(QFrame):
         self.result_image: Path | None = None
         self.siril_path: Path | None = find_siril()
         self.worker: SirilWorker | None = None
+        # ("finished", result) or ("failed", message) for the last run, so
+        # the verdict can be redrawn in a new palette. See _render_verdict.
+        self._verdict: tuple[str | None, object] = (None, None)
+        self._announced = False
+        theme.follow(self)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(
@@ -188,6 +193,8 @@ class RunPanel(QFrame):
         """Point the panel at a project that has just been built."""
         self.script_path = build_result.script_path
         self.stack_name = stack_name
+        self._verdict = (None, None)
+        self._announced = False
         self.output_dir = build_result.output_dir
         self.result_image = expected_output(self.script_path, stack_name)
         # The weighted stage plan, worked out at build time when the frame
@@ -315,6 +322,26 @@ class RunPanel(QFrame):
 
     def _on_finished(self, result) -> None:
         self._end_run()
+        # Kept so restyle can draw the same verdict again in a new palette.
+        # The verdict is rich text with tokens baked into it, and the run
+        # that produced it is long over by the time somebody switches.
+        self._verdict = ("finished", result)
+        self._render_verdict()
+
+    def _render_verdict(self) -> None:
+        """Draw whatever the last run had to say, in the active palette."""
+        kind, payload = self._verdict
+        if kind is None:
+            return
+        if kind == "failed":
+            self._draw_failure(payload)
+            return
+        self._draw_result(payload)
+
+    def restyle(self) -> None:
+        self._render_verdict()
+
+    def _draw_result(self, result) -> None:
         self.verdict.show()
 
         if result.cancelled:
@@ -324,7 +351,7 @@ class RunPanel(QFrame):
                 f'way through. The project folder is still there, so you can '
                 f'run it again whenever you like.</span>'
             )
-            self.finished.emit(False)
+            self._emit_once(False)
             return
 
         if result.ok:
@@ -343,7 +370,7 @@ class RunPanel(QFrame):
             )
             if result.output_image is not None:
                 self.open_image_button.show()
-            self.finished.emit(True)
+            self._emit_once(True)
             return
 
         detail = result.error_lines[0] if result.error_lines else (
@@ -356,17 +383,33 @@ class RunPanel(QFrame):
             f'above. The project folder is untouched, so you can fix the '
             f'problem and run it again.</span>'
         )
-        self.finished.emit(False)
+        self._emit_once(False)
 
     def _on_failed(self, message: str) -> None:
         self._end_run()
+        self._verdict = ("failed", message)
+        self._render_verdict()
+
+    def _draw_failure(self, message: str) -> None:
         self.verdict.show()
         self.verdict.setText(
             f'<span style="color:{theme.ERROR};font-weight:600;">Could not run '
             f'Siril.</span> '
             f'<span style="color:{theme.TEXT_MUTED};">{message}</span>'
         )
-        self.finished.emit(False)
+        self._emit_once(False)
+
+    def _emit_once(self, ok: bool) -> None:
+        """Announce the outcome, but only the first time it is drawn.
+
+        Redrawing the verdict for a palette switch must not tell the window
+        the stack just finished all over again -- that would re-open the
+        preview panel and re-run everything hung off `finished`.
+        """
+        if self._announced:
+            return
+        self._announced = True
+        self.finished.emit(ok)
 
     # -- small actions ---------------------------------------------------
 

@@ -43,7 +43,6 @@ from . import theme
 from .delete_dialog import DeleteRequest, confirm_delete
 from .flow import FlowLayout
 from .thumbnails import load_async
-from .windows_theme import apply_dark_titlebar
 
 TILE_WIDTH = 168
 TILE_HEIGHT = 95      # 16:9, matching the sensor
@@ -114,7 +113,7 @@ class FrameTile(QWidget):
         self.image.setFixedSize(TILE_WIDTH, TILE_HEIGHT)
         self.image.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.image.setText("no preview" if item.thumbnail is None else "")
-        # No initial sheet here: _restyle() below paints it, and one place
+        # No initial sheet here: restyle() below paints it, and one place
         # deciding how a tile looks is one place to change it.
         layout.addWidget(self.image)
 
@@ -124,7 +123,7 @@ class FrameTile(QWidget):
 
         if item.thumbnail is not None:
             load_async(item.thumbnail, self._on_image, TILE_WIDTH)
-        self._restyle()
+        self.restyle()
 
     def _on_image(self, image) -> None:
         if image is None:
@@ -145,32 +144,30 @@ class FrameTile(QWidget):
 
     def set_selected(self, selected: bool) -> None:
         self.selected = selected
-        self._restyle()
+        self.restyle()
 
-    def _restyle(self) -> None:
-        # Chosen is a 2px accent edge; merely hovered is a 1px pale one. The
-        # difference in weight, not just colour, is what keeps a pointer
-        # passing over a tile from looking like a tile you picked.
-        border = theme.ACCENT if self.selected else theme.BORDER
-        width = 2 if self.selected else 1
-        hover = theme.ACCENT if self.selected else theme.BORDER_STRONG
-        self.image.setStyleSheet(
-            f"QLabel {{ background: {theme.BG}; "
-            f"border: {width}px solid {border}; "
-            f"border-radius: {theme.RADIUS_XS + 2}px; "
-            f"color: {theme.TEXT_FAINT}; font-size: 8pt; }}"
-            f"QLabel:hover {{ border-color: {hover}; }}"
+    def restyle(self) -> None:
+        """Which of the tile's two looks it is wearing, and its caption.
+
+        Both used to be inline sheets built from tokens, which a palette
+        switch could never reach. They are object names now: the WEIGHT of
+        the border is part of the look -- chosen is 2px accent, merely
+        hovered is 1px pale -- so "selected" is a whole second rule rather
+        than one colour swapped out.
+        """
+        theme.repolish(
+            self.image, "TileSelected" if self.selected else "Tile"
         )
         bits = [f"#{self.item.index + 1}"]
-        colour = theme.TEXT_FAINT
+        name = "TileCaption"
         if self.item.fault:
             bits.append(self.item.fault)
-            colour = theme.WARN
+            name = "TileCaptionWarn"
         if self.item.excluded:
             bits.append("not in stack")
-            colour = theme.TEXT_FAINT
+            name = "TileCaption"
         self.caption.setText("  ·  ".join(bits))
-        self.caption.setStyleSheet(f"color: {colour}; font-size: 8pt;")
+        theme.repolish(self.caption, name)
 
     def mouseReleaseEvent(self, event) -> None:  # noqa: N802 - Qt naming
         if event.button() == Qt.MouseButton.LeftButton:
@@ -193,7 +190,8 @@ class StackGridWindow(QDialog):
         self._verdicts = verdicts or {}
 
         self.setWindowTitle(f"{session.display_target} — stack grid")
-        self.setStyleSheet(f"background: {theme.BG};")
+        self.setObjectName("Sheet")
+        theme.follow(self)
         self.resize(1120, 760)
 
         layout = QVBoxLayout(self)
@@ -305,14 +303,14 @@ class StackGridWindow(QDialog):
         self.delete_button.setEnabled(bool(chosen))
         if not chosen:
             self.selection_label.setText("Nothing selected.")
-            self.selection_label.setStyleSheet(f"color: {theme.TEXT_MUTED};")
+            theme.repolish(self.selection_label, "Muted")
             return
         total = sum(folder_size(item.path)[0] for item in chosen)
         self.selection_label.setText(
             f"{len(chosen)} selected, {describe_size(total)}. "
             f"{len(self._items) - len(chosen)} frames would remain."
         )
-        self.selection_label.setStyleSheet(f"color: {theme.TEXT};")
+        theme.repolish(self.selection_label, "")
 
     # -- actions ---------------------------------------------------------
 
@@ -372,7 +370,14 @@ class StackGridWindow(QDialog):
 
     def showEvent(self, event) -> None:  # noqa: N802
         super().showEvent(event)
-        apply_dark_titlebar(self.winId(), theme.SURFACE, theme.TEXT, theme.BORDER)
+        theme.apply_titlebar(self)
+
+    def restyle(self) -> None:
+        """The title bar, plus every tile's own inline state."""
+        theme.apply_titlebar(self)
+        for tile in self.tiles:
+            tile.restyle()
+        self._on_selection()
 
 
 class FrameViewer(QDialog):
@@ -387,7 +392,8 @@ class FrameViewer(QDialog):
         self._cache: dict[int, QPixmap] = {}
 
         self.setWindowTitle("Frame viewer")
-        self.setStyleSheet(f"background: {theme.BG};")
+        self.setObjectName("Sheet")
+        theme.follow(self)
         self.setWindowState(Qt.WindowState.WindowFullScreen)
 
         layout = QVBoxLayout(self)
@@ -396,9 +402,9 @@ class FrameViewer(QDialog):
 
         self.view = QLabel()
         self.view.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.view.setStyleSheet(
-            f"background: {theme.BG_SUNKEN}; color: {theme.TEXT_MUTED};"
-        )
+        # The ground behind a photograph, which on the light palette stays
+        # dark -- see BG_SUNKEN. Styled by name so the switch reaches it.
+        self.view.setObjectName("Sunken")
         layout.addWidget(self.view, 1)
 
         bar = QWidget()
@@ -593,4 +599,7 @@ class FrameViewer(QDialog):
 
     def showEvent(self, event) -> None:  # noqa: N802
         super().showEvent(event)
-        apply_dark_titlebar(self.winId(), theme.SURFACE, theme.TEXT, theme.BORDER)
+        theme.apply_titlebar(self)
+
+    def restyle(self) -> None:
+        theme.apply_titlebar(self)

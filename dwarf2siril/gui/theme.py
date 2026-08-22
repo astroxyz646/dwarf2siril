@@ -1,24 +1,44 @@
-"""Dark theme for the Dwarf2Siril window.
+"""The window's colours, and the palettes it can wear.
 
 Tuned for the situation the tool is used in: a dark room, at night, often
-straight after a session. The background is near-black rather than mid-grey,
-because a bright panel at 2am is genuinely unpleasant and washes out
-dark-adapted vision.
+straight after a session. The default background is near-black rather than
+mid-grey, because a bright panel at 2am is genuinely unpleasant and washes
+out dark-adapted vision.
 
-The accent is a deep, slightly desaturated blue. A pure #0080FF on near-black
-glares; this one is pulled down in both lightness and saturation so it reads
-as a calm, deliberate highlight rather than a light source. Note that blue is
-the WORST colour for dark adaptation -- short-wavelength light costs the most
-of it, which is why red torches are standard at a telescope -- so this is a
-considered aesthetic choice, not a physiological one. Anyone at the eyepiece
-should be dimming their screen anyway.
+The default accent is a deep, slightly desaturated blue. A pure #0080FF on
+near-black glares; this one is pulled down in both lightness and saturation
+so it reads as a calm, deliberate highlight rather than a light source. Note
+that blue is the WORST colour for dark adaptation -- short-wavelength light
+costs the most of it, which is why red torches are standard at a telescope --
+so this is a considered aesthetic choice, not a physiological one. Anyone at
+the eyepiece should be dimming their screen anyway.
 
-Everything is one flat token set so the whole window stays consistent. Nothing
-outside this module should name a colour: if a widget needs one, it either
-takes an object name that is styled here, or it imports a token.
+Everything is one flat token set so the whole window stays consistent.
+Nothing outside this module should name a colour: if a widget needs one, it
+either takes an object name that is styled here, or it imports a token.
+
+*** HOW SWITCHING WORKS ***
+Every colour lives on a frozen ``Palette``. ``set_palette`` copies the chosen
+one's fields onto THIS MODULE'S globals, so ``theme.BG`` keeps meaning "the
+active background" at the ninety-odd places across the gui package that read
+it. Rebinding module attributes is unusual, and it is chosen deliberately:
+the alternative is threading a palette object through every widget
+constructor in the package, and a switch that costs a ninety-site rewrite is
+a switch nobody adds.
+
+Repainting is two things, and BOTH are needed:
+
+1. ``app.setStyleSheet(theme.stylesheet())`` -- the global sheet. Qt
+   repolishes every widget that takes its colours from an object name, which
+   is most of them, and which is why rules live here rather than inline.
+2. ``changed`` -- a signal, for the rest. A widget that bakes a colour into
+   an inline sheet, a QBrush, a rich-text span or a paintEvent cannot be
+   reached by a style sheet. Those widgets pass themselves to ``follow`` and
+   grow a ``restyle`` method; the signal calls it.
 
 Three scales carry the rhythm, and every margin, gap and corner in the window
-is one of their values:
+is one of their values. NONE of them are per-palette -- a theme changes the
+colours, never the layout, or a switch would reflow the window:
 
 * ``SPACE_*``   -- 4px steps, for layout margins and spacing.
 * ``RADIUS_*``  -- corner radii, small for controls, larger for surfaces.
@@ -29,54 +49,157 @@ is one of their values:
 
 from __future__ import annotations
 
-# ---- surfaces, darkest first --------------------------------------------
-# BG_SUNKEN is only for the ground behind a photograph, where anything
-# lighter would sit in the picture's tonal range and compete with it.
-BG_SUNKEN = "#05070A"
-BG = "#0A0C10"
-SURFACE = "#141924"
-SURFACE_RAISED = "#1C2231"
-SURFACE_HOVER = "#242C3E"
-SURFACE_PRESSED = "#161B27"
+from dataclasses import dataclass, fields
 
-# Borders are deliberately quiet. Most separation in this window comes from
-# the surface steps above; a line is a last resort, not the default.
-BORDER = "#1F2634"
-BORDER_STRONG = "#2E3849"
-BORDER_BRIGHT = "#3F4B60"
+from PySide6.QtCore import QObject, Signal
 
-# ---- text ----------------------------------------------------------------
-TEXT_BRIGHT = "#FFFFFF"
-TEXT = "#E8ECF4"
-TEXT_MUTED = "#8E99AC"
-TEXT_FAINT = "#5E6879"
 
-# ---- accent --------------------------------------------------------------
-ACCENT = "#4C8FD9"
-ACCENT_HOVER = "#6BA6E8"
-ACCENT_PRESSED = "#3B79BE"
-ACCENT_DIM = "#2E567F"
-ACCENT_FG = "#04101C"
+@dataclass(frozen=True)
+class Palette:
+    """One complete set of colours. Frozen: a palette is a fact, not a state.
 
-# ---- status --------------------------------------------------------------
-# Each of these has to survive being seen next to the accent, so all three
-# sit well away from it in hue. RUNNING is the odd one out and the reason it
-# exists: work in progress used to be drawn in the accent, which on a blue
-# theme is indistinguishable from "this one is selected". A cyan-teal reads
-# as motion instead, at a glance, without joining the warn/error vocabulary.
-OK = "#4FC98C"
-WARN = "#E3A93F"
-ERROR = "#E5675E"
-ERROR_HOVER = "#EE7C73"
-ERROR_PRESSED = "#CF574F"
-RUNNING = "#38BEC9"
+    The field comments below are the reasoning behind the DEFAULT values, in
+    Deep Space. Every other palette answers the same questions its own way,
+    and where one deviates it says so at its own definition.
+    """
 
-# Text drawn on top of a filled ERROR button. Near-black rather than white:
-# white on this red is the weaker pairing, and a destructive button should
-# not also be the hardest thing to read.
-DANGER_FG = "#1A0806"
+    # The name shown in the picker, and the string written to settings.
+    name: str
+    # Whether this palette reads as dark. Drives Windows' immersive dark
+    # title bar, which is a boolean the OS owns rather than a colour we
+    # choose -- get it wrong and the caption text ends up the same tone as
+    # the caption behind it.
+    dark: bool
 
-# ---- spacing and radii ---------------------------------------------------
+    # ---- surfaces, darkest first (on a dark palette) --------------------
+    # BG_SUNKEN is only for the ground behind a photograph, where anything
+    # lighter would sit in the picture's tonal range and compete with it.
+    # This is a ROLE, not a lightness: on Daylight it stays DARK, because an
+    # astrophoto is almost entirely near-black and a white mount around it
+    # glares and flattens everything in the frame.
+    BG_SUNKEN: str
+    # Because BG_SUNKEN does not follow the rest of the palette, anything
+    # drawn ON it needs its own two tokens rather than TEXT_MUTED and TEXT.
+    SUNKEN_TEXT: str
+    SUNKEN_TEXT_BRIGHT: str
+
+    BG: str
+    SURFACE: str
+    SURFACE_RAISED: str
+    SURFACE_HOVER: str
+    SURFACE_PRESSED: str
+
+    # Borders are deliberately quiet. Most separation in this window comes
+    # from the surface steps above; a line is a last resort, not the default.
+    # STRONG and BRIGHT mean "more contrast against the surface", which on a
+    # dark palette is lighter and on a light one is darker.
+    BORDER: str
+    BORDER_STRONG: str
+    BORDER_BRIGHT: str
+
+    # ---- text -----------------------------------------------------------
+    TEXT_BRIGHT: str
+    TEXT: str
+    TEXT_MUTED: str
+    TEXT_FAINT: str
+
+    # ---- accent ---------------------------------------------------------
+    # HOVER means "more prominent", not "lighter": on a light palette the
+    # accent gets darker when you point at it, because lighter would fade.
+    ACCENT: str
+    ACCENT_HOVER: str
+    ACCENT_PRESSED: str
+    # Focus rings and selection washes. Always a low-contrast relative of the
+    # accent, so a ring never shouts louder than the thing it marks.
+    ACCENT_DIM: str
+    # Text drawn ON TOP of a filled accent button. Near-black on the dark
+    # palettes, whose accents are light enough to carry it; white on
+    # Daylight, whose accent is a deep blue. Getting this one backwards is
+    # the single most likely way to ship an unreadable primary button.
+    ACCENT_FG: str
+
+    # ---- status ---------------------------------------------------------
+    # Each of these has to survive being seen next to the accent, so all
+    # four sit well away from it. RUNNING is the odd one out and the reason
+    # it exists: work in progress used to be drawn in the accent, which on a
+    # blue theme is indistinguishable from "this one is selected". A
+    # cyan-teal reads as motion instead, at a glance, without joining the
+    # warn/error vocabulary.
+    OK: str
+    WARN: str
+    ERROR: str
+    ERROR_HOVER: str
+    ERROR_PRESSED: str
+    RUNNING: str
+
+    # Text drawn on top of a filled ERROR button. Near-black rather than
+    # white on the dark palettes: white on those reds is the weaker pairing,
+    # and a destructive button should not also be the hardest thing to read.
+    # Daylight's error is dark enough that the reasoning flips.
+    DANGER_FG: str
+
+    # ---- washes ---------------------------------------------------------
+    # The alpha used when TEXT is laid over a surface to make a hover state
+    # (see ``tint``). On a dark palette that is a pale wash lightening the
+    # surface; on a light one it is near-black darkening it, and the same
+    # alpha would be far too weak to see -- so the AMOUNT is per-palette
+    # rather than a literal in the sheet.
+    WASH_SOFT: int
+    WASH_HARD: int
+
+
+_COLOUR_FIELDS = tuple(
+    field.name for field in fields(Palette) if field.name not in ("name", "dark")
+)
+
+
+# ---- the palettes --------------------------------------------------------
+
+DEEP_SPACE = Palette(
+    name="Deep Space",
+    dark=True,
+    BG_SUNKEN="#05070A",
+    SUNKEN_TEXT="#8E99AC",
+    SUNKEN_TEXT_BRIGHT="#E8ECF4",
+    BG="#0A0C10",
+    SURFACE="#141924",
+    SURFACE_RAISED="#1C2231",
+    SURFACE_HOVER="#242C3E",
+    SURFACE_PRESSED="#161B27",
+    BORDER="#1F2634",
+    BORDER_STRONG="#2E3849",
+    BORDER_BRIGHT="#3F4B60",
+    TEXT_BRIGHT="#FFFFFF",
+    TEXT="#E8ECF4",
+    TEXT_MUTED="#8E99AC",
+    TEXT_FAINT="#5E6879",
+    ACCENT="#4C8FD9",
+    ACCENT_HOVER="#6BA6E8",
+    ACCENT_PRESSED="#3B79BE",
+    ACCENT_DIM="#2E567F",
+    ACCENT_FG="#04101C",
+    OK="#4FC98C",
+    WARN="#E3A93F",
+    ERROR="#E5675E",
+    ERROR_HOVER="#EE7C73",
+    ERROR_PRESSED="#CF574F",
+    RUNNING="#38BEC9",
+    DANGER_FG="#1A0806",
+    WASH_SOFT=0x0A,
+    WASH_HARD=0x1A,
+)
+
+PALETTES: dict[str, Palette] = {
+    palette.name: palette for palette in (DEEP_SPACE,)
+}
+
+DEFAULT_PALETTE = DEEP_SPACE.name
+
+#: The settings key the chosen palette is remembered under.
+SETTING_KEY = "theme"
+
+
+# ---- spacing and radii, which no palette touches -------------------------
 SPACE_1 = 4
 SPACE_2 = 8
 SPACE_3 = 12
@@ -93,6 +216,106 @@ FONT_STACK = '"Segoe UI Variable Text", "Segoe UI", "Inter", system-ui, sans-ser
 MONO_STACK = '"Cascadia Code", "Consolas", "SF Mono", monospace'
 
 
+# ---- the active palette --------------------------------------------------
+
+
+class _Bus(QObject):
+    """Carries the one signal. A module cannot own a Signal; a QObject can."""
+
+    changed = Signal()
+
+
+_bus = _Bus()
+
+#: Emitted after the active palette changes. Connect through ``follow``.
+changed = _bus.changed
+
+_active: Palette = DEEP_SPACE
+
+
+def active() -> Palette:
+    """The palette currently in force."""
+    return _active
+
+
+def names() -> list[str]:
+    """Every palette name, in the order the picker should offer them."""
+    return list(PALETTES)
+
+
+def resolve(name: str | None) -> Palette:
+    """The palette called ``name``, or the default if there is no such thing.
+
+    An unknown name is not an error. A settings file written by a newer
+    build, or edited by hand, should open the app in Deep Space rather than
+    refuse to start.
+    """
+    return PALETTES.get(name or "", PALETTES[DEFAULT_PALETTE])
+
+
+def _publish(palette: Palette) -> None:
+    """Copy ``palette`` onto this module's globals. See the module docstring."""
+    global _active
+    _active = palette
+    namespace = globals()
+    for token in _COLOUR_FIELDS:
+        namespace[token] = getattr(palette, token)
+    namespace["IS_DARK"] = palette.dark
+    namespace["PALETTE_NAME"] = palette.name
+
+
+def set_palette(name: str) -> Palette:
+    """Make the palette called ``name`` active. Does NOT repaint anything.
+
+    Use ``apply`` for that. This one is for before the window exists, where
+    there is nothing to repaint yet.
+    """
+    palette = resolve(name)
+    _publish(palette)
+    return palette
+
+
+def apply(app, name: str) -> Palette:
+    """Switch palette and repaint the whole window.
+
+    Both halves of the repaint, in the order that matters: the global sheet
+    first, so every object-named widget is already correct by the time the
+    widgets that restyle themselves go looking at their neighbours.
+    """
+    palette = set_palette(name)
+    if app is not None:
+        app.setStyleSheet(stylesheet())
+    _bus.changed.emit()
+    return palette
+
+
+def follow(widget) -> None:
+    """Call ``widget.restyle()`` whenever the palette changes.
+
+    For the widgets the global sheet cannot reach: inline sheets, QBrushes,
+    rich-text spans and paintEvents. Qt drops the connection when the widget
+    is destroyed, so there is nothing to undo.
+    """
+    _bus.changed.connect(widget.restyle)
+
+
+def repolish(widget, name: str | None = None) -> None:
+    """Make Qt re-read the sheet for one widget, optionally under a new name.
+
+    Qt matches a ``#Name`` rule when a widget is polished and not again, so a
+    widget whose object name is part of its STATE has to ask. Passing
+    ``name`` renames it first, which is how a label whose COLOUR is its
+    meaning changes what it means: "" puts it back on the default rules.
+    """
+    if name is not None:
+        widget.setObjectName(name)
+    widget.style().unpolish(widget)
+    widget.style().polish(widget)
+
+
+_publish(DEEP_SPACE)
+
+
 def tint(colour: str, alpha: int) -> str:
     """``colour`` at ``alpha``/255, in the form Qt actually parses.
 
@@ -105,7 +328,32 @@ def tint(colour: str, alpha: int) -> str:
     return f"#{alpha:02X}{colour.lstrip('#')}"
 
 
+def apply_titlebar(window) -> bool:
+    """Colour one window's native title bar in the active palette.
+
+    Every window in the app calls exactly this, from its showEvent and again
+    from its restyle, so a switch cannot leave one caption in the old
+    colours -- which is what makes the title bar part of the theme rather
+    than something set once at startup.
+    """
+    from .windows_theme import apply_titlebar as _apply
+
+    return _apply(
+        window.winId(),
+        caption=SURFACE,
+        text=TEXT,
+        border=BORDER,
+        dark=IS_DARK,
+    )
+
+
 def stylesheet() -> str:
+    """The whole window's sheet, built from whichever palette is active.
+
+    The tokens below are read as module globals rather than off ``active()``
+    on purpose: ``_publish`` has already rebound them, and naming them bare
+    keeps this sheet readable as a sheet.
+    """
     return f"""
     QWidget {{
         background: {BG};
@@ -132,6 +380,11 @@ def stylesheet() -> str:
     QWidget#Plain {{
         background: transparent;
     }}
+
+    /* Every dialog in the app sits on the window ground rather than the
+       platform's. This used to be an inline sheet on each one, which is
+       precisely the kind of thing a palette switch cannot reach. */
+    QDialog#Sheet {{ background: {BG}; }}
 
     /* ---- typography ------------------------------------------------ */
     /* Five sizes, and each one is a step in the hierarchy rather than a
@@ -200,6 +453,17 @@ def stylesheet() -> str:
     /* The folded sidebar's one-letter-per-line spine. */
     QLabel#Rail {{ color: {TEXT_FAINT}; font-size: 7.5pt; letter-spacing: 0.5px; }}
 
+    /* A line whose COLOUR is its meaning -- "this is fine", "mind this",
+       "this is wrong". Object names rather than inline sheets, so a palette
+       switch repaints them along with everything else. */
+    QLabel#Ok {{ color: {OK}; }}
+    QLabel#Warn {{ color: {WARN}; }}
+    QLabel#Error {{ color: {ERROR}; font-weight: 600; }}
+    /* The frame grid's caption line, which says how many are picked. Plain
+       TEXT once something is, muted while nothing is. */
+    QLabel#TileCaption {{ color: {TEXT_FAINT}; font-size: 8pt; }}
+    QLabel#TileCaptionWarn {{ color: {WARN}; font-size: 8pt; }}
+
     /* ---- cards ----------------------------------------------------- */
     /* A card is a surface, not a box. The step up from the window
        background is what separates it; the hairline only stops two cards
@@ -243,7 +507,7 @@ def stylesheet() -> str:
         font-size: 9pt;
         font-weight: 600;
     }}
-    QPushButton#Mode:hover {{ color: {TEXT}; background: {tint(TEXT, 0x0D)}; }}
+    QPushButton#Mode:hover {{ color: {TEXT}; background: {tint(TEXT, WASH_HARD)}; }}
     QPushButton#Mode:checked {{
         background: {SURFACE_RAISED};
         color: {TEXT};
@@ -255,6 +519,25 @@ def stylesheet() -> str:
         background: {tint(ERROR, 0x24)};
         color: {ERROR};
     }}
+
+    /* ---- the palette picker ----------------------------------------- */
+    /* Quiet on purpose. It shares the header row with the mode switcher,
+       which is the control that actually changes what the app does, so this
+       one carries no border and no fill until you point at it. */
+    QComboBox#ThemePicker {{
+        background: transparent;
+        border: 1px solid transparent;
+        border-radius: {RADIUS_SM}px;
+        padding: 5px 9px;
+        color: {TEXT_MUTED};
+        font-size: 9pt;
+    }}
+    QComboBox#ThemePicker:hover {{
+        color: {TEXT};
+        background: {tint(TEXT, WASH_SOFT)};
+        border-color: {BORDER};
+    }}
+    QComboBox#ThemePicker:focus {{ border-color: {ACCENT_DIM}; }}
 
     /* ---- the right-hand sidebar ------------------------------------- */
     /* Raised rather than sunken: it holds the controls and the button you
@@ -288,9 +571,9 @@ def stylesheet() -> str:
     }}
     QPushButton#SidebarToggle:hover {{
         color: {TEXT};
-        background: {tint(TEXT, 0x0D)};
+        background: {tint(TEXT, WASH_HARD)};
     }}
-    QPushButton#SidebarToggle:pressed {{ background: {tint(TEXT, 0x1A)}; }}
+    QPushButton#SidebarToggle:pressed {{ background: {tint(TEXT, WASH_HARD + 0x0D)}; }}
     QPushButton#SidebarToggle:focus {{ border: 1px solid {ACCENT_DIM}; }}
 
     /* ---- surfaces the header and footer sit on ---------------------- */
@@ -361,7 +644,10 @@ def stylesheet() -> str:
         border-color: {ACCENT_PRESSED};
     }}
     /* On a filled button the ring cannot be the border -- it would vanish
-       into the fill -- so focus lightens the fill and pales the edge. */
+       into the fill -- so focus pales the edge instead. TEXT is the right
+       colour for that on every palette: on the dark ones it is the lightest
+       thing available against a mid accent, and on Daylight it is the
+       darkest thing available against a deep one. */
     QPushButton#Primary:focus {{ border-color: {TEXT}; }}
     QPushButton#Primary:disabled {{
         background: {SURFACE_RAISED};
@@ -402,7 +688,7 @@ def stylesheet() -> str:
     }}
     QPushButton#Ghost:hover {{
         color: {TEXT};
-        background: {tint(TEXT, 0x0A)};
+        background: {tint(TEXT, WASH_SOFT)};
         border-color: {BORDER_STRONG};
     }}
     QPushButton#Ghost:pressed {{ background: {SURFACE_PRESSED}; }}
@@ -568,6 +854,55 @@ def stylesheet() -> str:
         font-size: 8.5pt;
         font-weight: 600;
         letter-spacing: 0.4px;
+    }}
+
+    /* ---- thumbnails and frame tiles --------------------------------- */
+    /* A picture's own mount, on a card and in the frame grid. These used to
+       be inline sheets built once at construction, which is exactly what a
+       palette switch cannot repaint -- so they are object names now, and
+       SELECTED is a second name rather than a second sheet. */
+    QLabel#Thumb {{
+        background: {BG};
+        border: 1px solid {BORDER};
+        border-radius: {RADIUS_XS + 2}px;
+        color: {TEXT_FAINT};
+        font-size: 8pt;
+    }}
+    QLabel#ThumbOpenable {{
+        background: {BG};
+        border: 1px solid {BORDER};
+        border-radius: {RADIUS_XS + 2}px;
+        color: {TEXT_FAINT};
+        font-size: 8pt;
+    }}
+    QLabel#ThumbOpenable:hover {{ border: 1px solid {ACCENT}; }}
+    /* Chosen is a 2px accent edge; merely hovered is a 1px pale one. The
+       difference in weight, not just colour, is what keeps a pointer
+       passing over a tile from looking like a tile you picked. */
+    QLabel#Tile {{
+        background: {BG};
+        border: 1px solid {BORDER};
+        border-radius: {RADIUS_XS + 2}px;
+        color: {TEXT_FAINT};
+        font-size: 8pt;
+    }}
+    QLabel#Tile:hover {{ border-color: {BORDER_STRONG}; }}
+    QLabel#TileSelected {{
+        background: {BG};
+        border: 2px solid {ACCENT};
+        border-radius: {RADIUS_XS + 2}px;
+        color: {TEXT_FAINT};
+        font-size: 8pt;
+    }}
+    QLabel#TileSelected:hover {{ border-color: {ACCENT}; }}
+
+    /* ---- the ground behind a photograph ----------------------------- */
+    /* BG_SUNKEN and its own text token. On Daylight this stays dark while
+       the rest of the window is light, so it cannot borrow TEXT_MUTED --
+       see the token's comment for why the mount is not inverted. */
+    QLabel#Sunken {{
+        background: {BG_SUNKEN};
+        color: {SUNKEN_TEXT};
     }}
 
     /* ---- progress -------------------------------------------------- */

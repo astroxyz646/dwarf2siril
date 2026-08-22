@@ -319,6 +319,16 @@ class GroupCard(QFrame):
         outer.addLayout(actions)
 
         self.refresh()
+        theme.follow(self)
+
+    def restyle(self) -> None:
+        """Redraw everything on this card whose colour is written into text.
+
+        The pills, the calibration line and the issue list are all rich-text
+        spans with a token baked in, and refresh() is already the one place
+        that builds them -- so a palette switch is just a refresh.
+        """
+        self.refresh()
 
     def _thumbnail_block(self) -> QWidget:
         """The DWARF's own preview of this target, or nothing at all.
@@ -344,22 +354,17 @@ class GroupCard(QFrame):
         # rather than opening an empty window.
         if self.group.album_image is not None:
             self.thumbnail_label.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
-            self.thumbnail_label.setStyleSheet(
-                f"QLabel {{ background: {theme.BG}; "
-                f"border: 1px solid {theme.BORDER}; "
-                f"border-radius: {theme.RADIUS_XS + 2}px; }}"
-                f"QLabel:hover {{ border: 1px solid {theme.ACCENT}; }}"
-            )
+            # Two object names rather than two inline sheets: only the
+            # openable one lights up under the pointer, and a sheet built
+            # here would still be holding the startup palette after a switch.
+            self.thumbnail_label.setObjectName("ThumbOpenable")
             self.thumbnail_label.setCursor(Qt.CursorShape.PointingHandCursor)
             self.thumbnail_label.setToolTip(
                 "Click to see your DWARF's own picture full size"
             )
             self.thumbnail_label.clicked.connect(self._open_album)
         else:
-            self.thumbnail_label.setStyleSheet(
-                f"background: {theme.BG}; border: 1px solid {theme.BORDER}; "
-                f"border-radius: {theme.RADIUS_XS + 2}px;"
-            )
+            self.thumbnail_label.setObjectName("Thumb")
         layout.addWidget(self.thumbnail_label)
 
         # No caption under the picture. It read as a label stuck across the
